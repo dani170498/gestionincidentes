@@ -1,37 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cookies } from "next/headers";
-import { authCookieName, verifyJwt } from "@/lib/auth";
-import type { Role } from "@/lib/rbac";
-
-async function getScope() {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  if (!token) return { restrictEncargado: false, encargado: null };
-  const payload = verifyJwt(token);
-  if (!payload) return { restrictEncargado: false, encargado: null };
-  const roles = payload.roles && payload.roles.length ? payload.roles : payload.role ? [payload.role] : [];
-  if (roles.includes("SUPERVISOR") || roles.includes("ADMIN")) {
-    return { restrictEncargado: false, encargado: null };
-  }
-  if (roles.includes("SOPORTE")) {
-    const user = await db.query("SELECT full_name FROM users WHERE id = $1", [payload.sub]);
-    const encargado = user.rowCount ? user.rows[0].full_name : null;
-    return { restrictEncargado: true, encargado };
-  }
-  return { restrictEncargado: false, encargado: null };
-}
-
-async function getRoles(): Promise<Role[]> {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  if (!token) return [];
-  const payload = verifyJwt(token);
-  if (!payload) return [];
-  return (payload.roles && payload.roles.length ? payload.roles : payload.role ? [payload.role] : []) as Role[];
-}
+import { getActorName, hasAnyRole, requireRoles } from "@/lib/security";
 
 export async function GET(req: Request) {
+  const auth = await requireRoles(["SOPORTE", "SUPERVISOR", "ADMIN"]);
+  if (!auth) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const tipoServicio = searchParams.get("tipoServicio");
@@ -68,16 +42,15 @@ export async function GET(req: Request) {
     where.push(`encargado <> $${values.length}`);
   }
 
-  const scope = await getScope();
-  if (scope.restrictEncargado && scope.encargado && cola !== "sin_asignar") {
-    values.push(scope.encargado);
+  const restrictToAssigned = hasAnyRole(auth, ["SOPORTE"]) && !hasAnyRole(auth, ["SUPERVISOR", "ADMIN"]);
+  if (restrictToAssigned && cola !== "sin_asignar") {
+    values.push(getActorName(auth));
     where.push(`encargado = $${values.length}`);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  const roles = await getRoles();
-  const includeInternals = roles.includes("SOPORTE") || roles.includes("SUPERVISOR") || roles.includes("ADMIN");
+  const includeInternals = hasAnyRole(auth, ["SOPORTE", "SUPERVISOR", "ADMIN"]);
 
   const baseSelect =
     `SELECT id, tipo_registro, solicitante, tipo_servicio, canal_oficina, gerencia, ` +

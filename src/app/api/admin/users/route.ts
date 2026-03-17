@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { authCookieName, verifyJwt } from "@/lib/auth";
+import { getDuplicateMessage, isUniqueViolation } from "@/lib/pg-errors";
 
 async function requireAdmin() {
   const jar = await cookies();
@@ -46,19 +47,26 @@ export async function POST(req: Request) {
 
   const hash = await bcrypt.hash(password, 12);
   const baseRole = roles[0] || role;
-  const result = await db.query(
-    "INSERT INTO users (username, full_name, email, role, password_hash, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id, username, full_name, email, role, active, created_at",
-    [username, fullName, email, baseRole, hash]
-  );
-  if (roles.length > 0) {
-    for (const r of roles) {
-      await db.query("INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING", [
-        result.rows[0].id,
-        r,
-      ]);
+  try {
+    const result = await db.query(
+      "INSERT INTO users (username, full_name, email, role, password_hash, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id, username, full_name, email, role, active, created_at",
+      [username, fullName, email, baseRole, hash]
+    );
+    if (roles.length > 0) {
+      for (const r of roles) {
+        await db.query("INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING", [
+          result.rows[0].id,
+          r,
+        ]);
+      }
     }
+    return NextResponse.json({ item: result.rows[0] }, { status: 201 });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "El usuario ya existe") }, { status: 409 });
+    }
+    throw error;
   }
-  return NextResponse.json({ item: result.rows[0] }, { status: 201 });
 }
 
 export async function PATCH(req: Request) {
@@ -117,10 +125,16 @@ export async function PATCH(req: Request) {
   }
 
   values.push(id);
-  const result = await db.query(
-    `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, username, full_name, email, role, active, created_at`,
-    values
-  );
-
-  return NextResponse.json({ item: result.rows[0] });
+  try {
+    const result = await db.query(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, username, full_name, email, role, active, created_at`,
+      values
+    );
+    return NextResponse.json({ item: result.rows[0] });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "Datos duplicados") }, { status: 409 });
+    }
+    throw error;
+  }
 }

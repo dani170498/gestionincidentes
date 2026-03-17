@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cookies } from "next/headers";
 import { authCookieName, verifyJwt } from "@/lib/auth";
+import { getDuplicateMessage, isUniqueViolation } from "@/lib/pg-errors";
 
 async function isAuthorized(req: Request): Promise<boolean> {
   const apiKey = req.headers.get("x-api-key") || "";
@@ -158,58 +159,66 @@ export async function POST(req: Request) {
   const tipoRegistro = body.tipo_registro === "SOPORTE" ? "SOPORTE" : "INCIDENTE";
   const status = body.estado || (body.primer_contacto ? "RESUELTO" : "REGISTRADO");
 
-  const result = await db.query(
-    `INSERT INTO incidents (
-      external_id,
-      tipo_registro,
-      solicitante,
-      tipo_servicio,
-      canal_oficina,
-      gerencia,
-      motivo_servicio,
-      descripcion,
-      encargado,
-      fecha_reporte,
-      hora_reporte,
-      fecha_respuesta,
-      hora_respuesta,
-      accion_tomada,
-      primer_contacto,
-      tiempo_minutos,
-      mes_atencion,
-      categoria,
-      porcentaje,
-      regla_porcentaje,
-      estado,
-      created_at
-    ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
-    ) RETURNING id`,
-    [
-      body.external_id,
-      tipoRegistro,
-      body.solicitante,
-      resolvedTipoServicio.name,
-      resolvedCanal.name,
-      resolvedGerencia.name,
-      resolvedMotivo.name,
-      body.descripcion,
-      body.encargado,
-      body.fecha_reporte,
-      body.hora_reporte,
-      body.fecha_respuesta,
-      body.hora_respuesta,
-      body.accion_tomada,
-      body.primer_contacto === true || body.primer_contacto === "SI",
-      diffMinutes,
-      monthAttention,
-      categoria,
-      porcentaje,
-      regla,
-      status,
-      createdAt,
-    ]
-  );
+  let result;
+  try {
+    result = await db.query(
+      `INSERT INTO incidents (
+        external_id,
+        tipo_registro,
+        solicitante,
+        tipo_servicio,
+        canal_oficina,
+        gerencia,
+        motivo_servicio,
+        descripcion,
+        encargado,
+        fecha_reporte,
+        hora_reporte,
+        fecha_respuesta,
+        hora_respuesta,
+        accion_tomada,
+        primer_contacto,
+        tiempo_minutos,
+        mes_atencion,
+        categoria,
+        porcentaje,
+        regla_porcentaje,
+        estado,
+        created_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
+      ) RETURNING id`,
+      [
+        body.external_id,
+        tipoRegistro,
+        body.solicitante,
+        resolvedTipoServicio.name,
+        resolvedCanal.name,
+        resolvedGerencia.name,
+        resolvedMotivo.name,
+        body.descripcion,
+        body.encargado,
+        body.fecha_reporte,
+        body.hora_reporte,
+        body.fecha_respuesta,
+        body.hora_respuesta,
+        body.accion_tomada,
+        body.primer_contacto === true || body.primer_contacto === "SI",
+        diffMinutes,
+        monthAttention,
+        categoria,
+        porcentaje,
+        regla,
+        status,
+        createdAt,
+      ]
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "El ticket externo ya existe") }, { status: 409 });
+    }
+    throw error;
+  }
 
   return NextResponse.json({
     ok: true,

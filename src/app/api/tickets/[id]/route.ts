@@ -1,35 +1,39 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cookies } from "next/headers";
-import { authCookieName, verifyJwt } from "@/lib/auth";
-import type { Role } from "@/lib/rbac";
+import { canAccessTicket, getActorName, getIncidentSecurityRow, requireRoles } from "@/lib/security";
 
-async function requireSupportOrAdmin() {
-  const jar = await cookies();
-  const token = jar.get(authCookieName)?.value;
-  const payload = token ? verifyJwt(token) : null;
-  const roles = payload?.roles && payload.roles.length ? payload.roles : payload?.role ? [payload.role] : [];
-  if (!payload) return null;
-  if (!roles.includes("SOPORTE") && !roles.includes("SUPERVISOR") && !roles.includes("ADMIN")) return null;
-  return { payload, roles: roles as Role[] };
-}
+type SupportTargetRow = {
+  full_name: string | null;
+  username: string;
+};
 
-async function getUserName(userId: string) {
-  const user = await db.query("SELECT full_name, username FROM users WHERE id = $1", [userId]);
-  if (user.rowCount === 0) return null;
-  return user.rows[0].full_name || user.rows[0].username;
+async function resolveSupportAssignee(assignTo: string) {
+  const result = (await db.query(
+    `SELECT DISTINCT u.full_name, u.username
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     WHERE u.active = true
+       AND (u.role = 'SOPORTE' OR ur.role = 'SOPORTE')
+       AND ($1 IN (u.username, COALESCE(u.full_name, '')))
+     LIMIT 1`,
+    [assignTo]
+  )) as { rowCount: number; rows: SupportTargetRow[] };
+  if (result.rowCount === 0) return null;
+  return result.rows[0].full_name || result.rows[0].username;
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireSupportOrAdmin();
+  const auth = await requireRoles(["SOPORTE", "SUPERVISOR", "ADMIN"]);
   if (!auth) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const { id } = await params;
+  const incidentId = Number(id);
+  if (!incidentId) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+
   const body = await req.json().catch(() => null);
 
   const status = body?.status as string | undefined;
   const action = body?.action as string | undefined;
-  const classification = typeof body?.classification === "string" ? body.classification.trim() : undefined;
   const assignTo = typeof body?.assignTo === "string" ? body.assignTo.trim() : undefined;
   const accionTomada = typeof body?.accionTomada === "string" ? body.accionTomada.trim() : undefined;
   const descripcion = typeof body?.descripcion === "string" ? body.descripcion.trim() : undefined;
@@ -42,16 +46,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
   }
 
-  const incident = await db.query(
-    "SELECT id, estado, encargado, primer_contacto, fecha_reporte, hora_reporte FROM incidents WHERE id = $1",
-    [Number(id)]
-  );
-  if (incident.rowCount === 0) {
+  const incident = await getIncidentSecurityRow(incidentId);
+  if (!incident) {
     return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
   }
 
-  const actorName = await getUserName(auth.payload.sub);
-  if (!actorName) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  const actorName = getActorName(auth);
+
+  if (action === "take") {
+    if (!canAccessTicket(auth, incident, "queue")) {
+      return NextResponse.json({ error: "No puedes tomar este ticket" }, { status: 403 });
+    }
+  } else if (!canAccessTicket(auth, incident, "manage")) {
+    return NextResponse.json({ error: "No puedes gestionar este ticket" }, { status: 403 });
+  }
 
   const updates: string[] = [];
   const values: Array<string | number | boolean> = [];
@@ -65,13 +73,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === "reassign") {
     if (!assignTo) return NextResponse.json({ error: "Asignación requerida" }, { status: 400 });
+    const assignee = await resolveSupportAssignee(assignTo);
+    if (!assignee) {
+      return NextResponse.json({ error: "Usuario de soporte inválido" }, { status: 400 });
+    }
     updates.push(`encargado = $${values.length + 1}`);
-    values.push(assignTo);
-  }
-
-  if (classification) {
-    updates.push(`clasificacion = $${values.length + 1}`);
-    values.push(classification);
+    values.push(assignee);
   }
 
   if (accionTomada) {
@@ -98,8 +105,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     values.push(horaRespuesta);
   }
 
-  const reportDate = incident.rows[0].fecha_reporte;
-  const reportTime = incident.rows[0].hora_reporte;
+  const reportDate = incident.fecha_reporte;
+  const reportTime = incident.hora_reporte;
   const nextDate = fechaRespuesta || reportDate;
   const nextTime = horaRespuesta || reportTime;
   const start = new Date(`${reportDate}T${reportTime}`);
@@ -132,7 +139,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   updates.push(`last_updated_at = now()`);
 
-  values.push(Number(id));
+  values.push(incidentId);
   const result = await db.query(
     `UPDATE incidents SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, estado, encargado, clasificacion`,
     values
@@ -142,7 +149,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const logStatus = status || "EN_ATENCION";
     await db.query(
       "INSERT INTO status_logs (incident_id, estado, changed_by) VALUES ($1, $2, $3)",
-      [Number(id), logStatus, Number(auth.payload.sub)]
+      [incidentId, logStatus, auth.userId]
     );
   }
 

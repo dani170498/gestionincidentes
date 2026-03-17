@@ -11,6 +11,9 @@ export type JwtPayload = {
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const COOKIE_NAME = "auth_token";
+// Keep cookie non-secure by default to allow HTTP environments (VM/local reverse proxy without TLS).
+// Enable explicitly with COOKIE_SECURE=true when HTTPS is configured.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === "true";
 
 export function signJwt(payload: JwtPayload): string {
   if (!JWT_SECRET) {
@@ -35,3 +38,4 @@ export function getAuthFromRequest(req: NextRequest): JwtPayload | null {
 }
 
 export const authCookieName = COOKIE_NAME;
+export const authCookieSecure = COOKIE_SECURE;

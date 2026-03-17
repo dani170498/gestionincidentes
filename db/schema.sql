@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS status_logs (
   changed_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS ticket_actions (
+  id SERIAL PRIMARY KEY,
+  incident_id INTEGER NOT NULL REFERENCES incidents(id),
+  action_text TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id SERIAL PRIMARY KEY,
   entity TEXT NOT NULL,

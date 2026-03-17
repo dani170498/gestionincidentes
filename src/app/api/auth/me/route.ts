@@ -16,6 +16,9 @@ export async function GET() {
   );
   if (result.rowCount === 0) return NextResponse.json({ user: null });
   const rolesResult = await db.query("SELECT role FROM user_roles WHERE user_id = $1", [payload.sub]);
-  const roles = rolesResult.rowCount > 0 ? rolesResult.rows.map((r) => r.role) : [result.rows[0].role];
+  const roles =
+    rolesResult.rowCount > 0
+      ? rolesResult.rows.map((r: { role: string }) => r.role)
+      : [result.rows[0].role];
   return NextResponse.json({ user: { ...result.rows[0], roles } });
 }

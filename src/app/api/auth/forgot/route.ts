@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import crypto from "crypto";
+import { getDuplicateMessage, isUniqueViolation } from "@/lib/pg-errors";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -18,10 +19,17 @@ export async function POST(req: Request) {
   const token = crypto.randomBytes(24).toString("hex");
   const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
 
-  await db.query(
-    "INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)",
-    [user.rows[0].id, token, expires]
-  );
+  try {
+    await db.query(
+      "INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)",
+      [user.rows[0].id, token, expires]
+    );
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "No se pudo generar el token") }, { status: 409 });
+    }
+    throw error;
+  }
 
   // En un sistema real, se enviaría por email/SMS.
   return NextResponse.json({ ok: true, token });

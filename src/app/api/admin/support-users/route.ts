@@ -18,13 +18,15 @@ export async function GET() {
   if (!auth) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   const result = await db.query(
-    `SELECT id, full_name, username
-     FROM users
-     WHERE active = true AND role = 'SOPORTE'
-     ORDER BY full_name ASC`
+    `SELECT DISTINCT u.id, u.full_name, u.username
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     WHERE u.active = true
+       AND (u.role = 'SOPORTE' OR ur.role = 'SOPORTE')
+     ORDER BY u.full_name ASC, u.username ASC`
   );
 
-  const items = result.rows.map((row) => ({
+  const items = result.rows.map((row: { id: number; full_name: string | null; username: string }) => ({
     id: row.id,
     name: row.full_name || row.username,
   }));

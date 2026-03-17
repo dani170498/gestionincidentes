@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { publishCatalogEvent } from "@/lib/webhooks";
+import { getDuplicateMessage, isUniqueViolation } from "@/lib/pg-errors";
 
 const catalogMap: Record<string, { table: string; label: string; hasServiceType?: boolean }> = {
   tiposervicio: { table: "catalog_service_types", label: "Tipo de servicio" },
@@ -47,29 +48,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ catalog
     if (!serviceTypeId) {
       return NextResponse.json({ error: "Tipo de servicio requerido" }, { status: 400 });
     }
+    try {
+      const result = await db.query(
+        `INSERT INTO ${catalog.table} (name, service_type_id, active) VALUES ($1, $2, true) RETURNING id, name, active, service_type_id`,
+        [name, serviceTypeId]
+      );
+      await publishCatalogEvent({
+        catalogo,
+        action: "create",
+        item: result.rows[0],
+      });
+      return NextResponse.json({ item: result.rows[0] }, { status: 201 });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return NextResponse.json({ error: getDuplicateMessage(error, "El catálogo ya existe") }, { status: 409 });
+      }
+      throw error;
+    }
+  }
+
+  try {
     const result = await db.query(
-      `INSERT INTO ${catalog.table} (name, service_type_id, active) VALUES ($1, $2, true) RETURNING id, name, active, service_type_id`,
-      [name, serviceTypeId]
+      `INSERT INTO ${catalog.table} (name, active) VALUES ($1, true) RETURNING id, name, active`,
+      [name]
     );
+
     await publishCatalogEvent({
       catalogo,
       action: "create",
       item: result.rows[0],
     });
     return NextResponse.json({ item: result.rows[0] }, { status: 201 });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "El catálogo ya existe") }, { status: 409 });
+    }
+    throw error;
   }
-
-  const result = await db.query(
-    `INSERT INTO ${catalog.table} (name, active) VALUES ($1, true) RETURNING id, name, active`,
-    [name]
-  );
-
-  await publishCatalogEvent({
-    catalogo,
-    action: "create",
-    item: result.rows[0],
-  });
-  return NextResponse.json({ item: result.rows[0] }, { status: 201 });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ catalogo: string }> }) {
@@ -103,17 +118,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ catalo
 
   values.push(id);
   const returning = catalog.hasServiceType ? "id, name, active, service_type_id" : "id, name, active";
-  const result = await db.query(
-    `UPDATE ${catalog.table} SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING ${returning}`,
-    values
-  );
+  try {
+    const result = await db.query(
+      `UPDATE ${catalog.table} SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING ${returning}`,
+      values
+    );
 
-  const action =
-    typeof body.active === "boolean" ? (body.active ? "activate" : "deactivate") : "update";
-  await publishCatalogEvent({
-    catalogo,
-    action,
-    item: result.rows[0],
-  });
-  return NextResponse.json({ item: result.rows[0] });
+    const action =
+      typeof body.active === "boolean" ? (body.active ? "activate" : "deactivate") : "update";
+    await publishCatalogEvent({
+      catalogo,
+      action,
+      item: result.rows[0],
+    });
+    return NextResponse.json({ item: result.rows[0] });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ error: getDuplicateMessage(error, "El catálogo ya existe") }, { status: 409 });
+    }
+    throw error;
+  }
 }

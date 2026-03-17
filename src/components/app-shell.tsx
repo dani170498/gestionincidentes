@@ -11,6 +11,7 @@ const links = [
   { label: "Mis tickets", href: "/admin/mis-tickets", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Tickets", href: "/admin/resueltos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Gráficos", href: "/admin/graficos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
+  { label: "Importar Excel", href: "/admin/importar", roles: ["ADMIN"] },
   { label: "Catálogos", href: "/admin/catalogos", roles: ["ADMIN"] },
   { label: "Usuarios", href: "/admin/usuarios", roles: ["ADMIN"] },
 ];
