@@ -37,6 +37,7 @@ type TicketTab = "TODOS" | "EN_ATENCION" | "RESPONDIDO" | "RESUELTO";
 type ReassignStep = "select" | "confirm" | "done";
 
 type EditState = {
+  gerencia: string;
   accion_tomada: string;
   fecha_respuesta: string;
   hora_respuesta: string;
@@ -128,6 +129,7 @@ export default function MisTicketsPage() {
   function openEdit(ticket: Ticket) {
     setSelected(ticket);
     setEdit({
+      gerencia: ticket.gerencia ?? "",
       accion_tomada: ticket.accion_tomada ?? "",
       fecha_respuesta: ticket.fecha_respuesta?.slice(0, 10) || "",
       hora_respuesta: ticket.hora_respuesta?.slice(0, 5) || "",
@@ -145,6 +147,7 @@ export default function MisTicketsPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        gerencia: edit.gerencia,
         accionTomada: edit.accion_tomada,
         fechaRespuesta: edit.estado === "RESUELTO" ? edit.fecha_respuesta : undefined,
         horaRespuesta: edit.estado === "RESUELTO" ? edit.hora_respuesta : undefined,
@@ -326,9 +329,20 @@ export default function MisTicketsPage() {
               </label>
               <div className="split">
                 <label className="field">
+                  <span className="label">Gerencia</span>
+                  <input
+                    className="input"
+                    value={edit.gerencia}
+                    onChange={(e) => setEdit({ ...edit, gerencia: e.target.value })}
+                    placeholder="Completar al tomar el ticket"
+                  />
+                </label>
+                <label className="field">
                   <span className="label">Tipo de registro</span>
                   <input className="input input--readonly" value={selected.tipo_registro || "SOPORTE"} readOnly />
                 </label>
+              </div>
+              <div className="split">
                 <label className="field">
                   <span className="label">Estado</span>
                   <select

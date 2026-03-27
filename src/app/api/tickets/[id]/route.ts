@@ -35,6 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const status = body?.status as string | undefined;
   const action = body?.action as string | undefined;
   const assignTo = typeof body?.assignTo === "string" ? body.assignTo.trim() : undefined;
+  const gerencia = typeof body?.gerencia === "string" ? body.gerencia.trim() : undefined;
   const accionTomada = typeof body?.accionTomada === "string" ? body.accionTomada.trim() : undefined;
   const descripcion = typeof body?.descripcion === "string" ? body.descripcion.trim() : undefined;
   const fechaRespuesta = typeof body?.fechaRespuesta === "string" ? body.fechaRespuesta.trim() : undefined;
@@ -79,6 +80,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     updates.push(`encargado = $${values.length + 1}`);
     values.push(assignee);
+  }
+
+  if (gerencia) {
+    updates.push(`gerencia = $${values.length + 1}`);
+    values.push(gerencia);
   }
 
   if (accionTomada) {

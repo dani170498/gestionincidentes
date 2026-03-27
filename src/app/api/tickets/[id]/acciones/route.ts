@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { canAccessTicket, getIncidentSecurityRow, requireRoles } from "@/lib/security";
+import { publishTicketActionEvent } from "@/lib/webhooks";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRoles(["SOPORTE", "SUPERVISOR", "ADMIN"]);
@@ -65,6 +66,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   );
 
   await db.query("UPDATE incidents SET last_updated_at = now() WHERE id = $1", [incidentId]);
+
+  const createdByNameResult = await db.query(
+    "SELECT COALESCE(full_name, username, 'Sistema') AS name FROM users WHERE id = $1",
+    [auth.userId]
+  );
+  const ticketResult = await db.query(
+    `SELECT id, tipo_registro, estado, solicitante, tipo_servicio, canal_oficina, gerencia, encargado
+     FROM incidents
+     WHERE id = $1`,
+    [incidentId]
+  );
+
+  if (ticketResult.rowCount > 0) {
+    await publishTicketActionEvent({
+      ticket: ticketResult.rows[0],
+      action: {
+        id: result.rows[0].id,
+        text: result.rows[0].action_text,
+        created_at: result.rows[0].created_at,
+        created_by: createdByNameResult.rows[0]?.name || "Sistema",
+      },
+    }).catch(() => null);
+  }
 
   return NextResponse.json({ item: result.rows[0] }, { status: 201 });
 }

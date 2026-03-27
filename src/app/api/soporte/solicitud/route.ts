@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { authCookieName, verifyJwt } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+const GERENCIA_PENDIENTE = "PENDIENTE_DEFINIR";
+
 function toDateParts(date: Date) {
   const iso = date.toISOString();
   return {
@@ -58,11 +60,10 @@ export async function POST(req: Request) {
 
   const tipoServicio = body?.tipoServicio?.trim();
   const canalOficina = body?.canalOficina?.trim();
-  const gerencia = body?.gerencia?.trim();
   const descripcion = body?.descripcion?.trim();
   const bodySolicitante = body?.solicitante?.trim();
 
-  if (!tipoServicio || !canalOficina || !gerencia || !descripcion) {
+  if (!tipoServicio || !canalOficina || !descripcion) {
     return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
   }
 
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
       solicitante,
       tipo_servicio,
       canal_oficina,
-      gerencia,
+      GERENCIA_PENDIENTE,
       motivo_servicio,
       descripcion,
       encargado,
@@ -114,7 +115,7 @@ export async function POST(req: Request) {
       solicitante,
       tipoServicio,
       canalOficina,
-      gerencia,
+      GERENCIA_PENDIENTE,
       "SIN_MOTIVO",
       descripcion,
       encargado,

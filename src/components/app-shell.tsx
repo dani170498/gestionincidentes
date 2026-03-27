@@ -7,6 +7,7 @@ import { LayoutGrid, LogOut, Settings } from "lucide-react";
 const links = [
   { label: "Formulario", href: "/incidentes", roles: ["SOLICITANTE", "SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Soporte", href: "/soporte", roles: ["SOLICITANTE", "SOPORTE", "SUPERVISOR", "ADMIN"] },
+  { label: "API Docs", href: "/docs", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Pendientes", href: "/admin/en-proceso", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Mis tickets", href: "/admin/mis-tickets", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
   { label: "Tickets", href: "/admin/resueltos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },

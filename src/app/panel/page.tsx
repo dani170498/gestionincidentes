@@ -24,6 +24,7 @@ export default function PanelPage() {
     () => [
       { label: "Formulario de gestión", href: "/incidentes", roles: ["SOLICITANTE", "SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Solicitud de soporte", href: "/soporte", roles: ["SOLICITANTE", "SOPORTE", "SUPERVISOR", "ADMIN"] },
+      { label: "Documentación API", href: "/docs", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Pendientes de asignación", href: "/admin/en-proceso", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Mis tickets", href: "/admin/mis-tickets", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Tickets", href: "/admin/resueltos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },

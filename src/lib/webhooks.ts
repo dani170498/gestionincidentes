@@ -11,6 +11,27 @@ type CatalogEventPayload = {
   item: Record<string, unknown>;
 };
 
+type TicketActionEventPayload = {
+  event: string;
+  occurred_at: string;
+  ticket: {
+    id: number;
+    tipo_registro: string;
+    estado: string;
+    solicitante: string;
+    tipo_servicio: string;
+    canal_oficina: string;
+    gerencia: string;
+    encargado: string;
+  };
+  action: {
+    id: number;
+    text: string;
+    created_at: string;
+    created_by: string;
+  };
+};
+
 function buildHeaders() {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (WEBHOOK_SECRET) headers["x-webhook-secret"] = WEBHOOK_SECRET;
@@ -29,31 +50,19 @@ async function sendWebhook(targetUrl: string, payload: CatalogEventPayload) {
   }
 }
 
-export async function publishCatalogEvent(params: {
-  catalogo: string;
-  action: "create" | "update" | "deactivate" | "activate";
-  item: Record<string, unknown>;
-}) {
+async function publishWebhookEvent(eventType: string, payload: CatalogEventPayload | TicketActionEventPayload) {
   if (!WEBHOOK_URL) return { skipped: true };
-
-  const payload: CatalogEventPayload = {
-    event: "catalog.changed",
-    occurred_at: new Date().toISOString(),
-    catalogo: params.catalogo,
-    action: params.action,
-    item: params.item,
-  };
 
   const outbox = await db.query(
     `INSERT INTO webhook_outbox (event_type, payload, target_url, status, attempts)
      VALUES ($1, $2, $3, 'PENDING', 0)
      RETURNING id`,
-    [payload.event, payload, WEBHOOK_URL]
+    [eventType, payload, WEBHOOK_URL]
   );
 
   const outboxId = outbox.rows[0]?.id;
   try {
-    await sendWebhook(WEBHOOK_URL, payload);
+    await sendWebhook(WEBHOOK_URL, payload as CatalogEventPayload);
     await db.query(
       `UPDATE webhook_outbox
        SET status = 'SENT', attempts = attempts + 1, last_error = NULL, updated_at = now()
@@ -71,6 +80,50 @@ export async function publishCatalogEvent(params: {
     );
     return { ok: false, id: outboxId, error: message };
   }
+}
+
+export async function publishCatalogEvent(params: {
+  catalogo: string;
+  action: "create" | "update" | "deactivate" | "activate";
+  item: Record<string, unknown>;
+}) {
+  const payload: CatalogEventPayload = {
+    event: "catalog.changed",
+    occurred_at: new Date().toISOString(),
+    catalogo: params.catalogo,
+    action: params.action,
+    item: params.item,
+  };
+
+  return publishWebhookEvent(payload.event, payload);
+}
+
+export async function publishTicketActionEvent(params: {
+  ticket: {
+    id: number;
+    tipo_registro: string;
+    estado: string;
+    solicitante: string;
+    tipo_servicio: string;
+    canal_oficina: string;
+    gerencia: string;
+    encargado: string;
+  };
+  action: {
+    id: number;
+    text: string;
+    created_at: string;
+    created_by: string;
+  };
+}) {
+  const payload: TicketActionEventPayload = {
+    event: "ticket.action.created",
+    occurred_at: new Date().toISOString(),
+    ticket: params.ticket,
+    action: params.action,
+  };
+
+  return publishWebhookEvent(payload.event, payload);
 }
 
 export async function retryWebhookOutbox(id?: number) {
