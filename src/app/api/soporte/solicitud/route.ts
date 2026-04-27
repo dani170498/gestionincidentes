@@ -90,7 +90,7 @@ export async function POST(req: Request) {
       solicitante,
       tipo_servicio,
       canal_oficina,
-      GERENCIA_PENDIENTE,
+      gerencia,
       motivo_servicio,
       descripcion,
       encargado,
