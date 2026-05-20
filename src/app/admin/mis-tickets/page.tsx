@@ -847,7 +847,7 @@ export default function MisTicketsPage() {
                         <article key={item.id} className="timeline-item">
                           <div className="timeline-item__meta">
                             <strong>{item.created_by_name}</strong>
-                            <span>{new Date(item.created_at).toLocaleString()}</span>
+                            <span>{formatDateTime(item.created_at)}</span>
                           </div>
                           <p className="detail-copy">{item.action_text}</p>
                         </article>

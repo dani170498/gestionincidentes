@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { canAccessTicket, getIncidentSecurityRow, requireRoles } from "@/lib/security";
+import { getLaPazIsoString } from "@/lib/utils";
 import { publishTicketActionEvent } from "@/lib/webhooks";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,7 +28,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     [incidentId]
   );
 
-  return NextResponse.json({ items: result.rows });
+  const items = result.rows.map((row) => ({
+    ...row,
+    created_at: row.created_at instanceof Date ? getLaPazIsoString(row.created_at) : String(row.created_at),
+  }));
+
+  return NextResponse.json({ items });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -96,5 +102,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }).catch(() => null);
   }
 
-  return NextResponse.json({ item: result.rows[0] }, { status: 201 });
+  const item = {
+    ...result.rows[0],
+    created_at:
+      result.rows[0].created_at instanceof Date
+        ? getLaPazIsoString(result.rows[0].created_at)
+        : String(result.rows[0].created_at),
+  };
+
+  return NextResponse.json({ item }, { status: 201 });
 }
