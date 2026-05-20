@@ -117,7 +117,7 @@ export async function GET(req: Request) {
 
   const baseSelect =
     `SELECT id, external_id, tipo_registro, solicitante, tipo_servicio, canal_oficina, gerencia, ` +
-    `motivo_servicio, descripcion, encargado, fecha_reporte, hora_reporte, ` +
+    `motivo_servicio, descripcion, encargado, fecha_reporte, hora_reporte, fecha_toma, hora_toma, ` +
     `fecha_respuesta, hora_respuesta, accion_tomada, primer_contacto, ` +
     `tiempo_minutos, mes_atencion, categoria, porcentaje, regla_porcentaje, ` +
     `estado, created_at` +

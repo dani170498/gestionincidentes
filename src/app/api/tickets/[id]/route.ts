@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { canAccessTicket, getActorName, getIncidentSecurityRow, requireRoles } from "@/lib/security";
+import { getLaPazDateTimeParts } from "@/lib/utils";
 
 type SupportTargetRow = {
   full_name: string | null;
@@ -39,8 +40,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const motivoServicio = typeof body?.motivoServicio === "string" ? body.motivoServicio.trim() : undefined;
   const accionTomada = typeof body?.accionTomada === "string" ? body.accionTomada.trim() : undefined;
   const descripcion = typeof body?.descripcion === "string" ? body.descripcion.trim() : undefined;
-  const fechaRespuesta = typeof body?.fechaRespuesta === "string" ? body.fechaRespuesta.trim() : undefined;
-  const horaRespuesta = typeof body?.horaRespuesta === "string" ? body.horaRespuesta.trim() : undefined;
   const primerContacto = typeof body?.primerContacto === "boolean" ? body.primerContacto : undefined;
 
   const allowedStatus = ["REGISTRADO", "EN_ATENCION", "RESPONDIDO", "RESUELTO"];
@@ -63,14 +62,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "No puedes gestionar este ticket" }, { status: 403 });
   }
 
+  if (incident.estado === "RESUELTO") {
+    return NextResponse.json(
+      { error: "El ticket ya fue resuelto y no admite más gestión ni reasignaciones" },
+      { status: 400 }
+    );
+  }
+
   const updates: string[] = [];
   const values: Array<string | number | boolean> = [];
 
   if (action === "take") {
+    const takenAt = new Date();
+    const takenAtParts = getLaPazDateTimeParts(takenAt);
     updates.push(`encargado = $${values.length + 1}`);
     values.push(actorName);
     updates.push(`estado = $${values.length + 1}`);
     values.push("EN_ATENCION");
+    if (!incident.fecha_toma || !incident.hora_toma) {
+      updates.push(`fecha_toma = $${values.length + 1}`);
+      values.push(takenAtParts.fecha);
+      updates.push(`hora_toma = $${values.length + 1}`);
+      values.push(takenAtParts.hora);
+    }
   }
 
   if (action === "reassign") {
@@ -108,36 +122,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     values.push(primerContacto);
   }
 
-  if (fechaRespuesta) {
-    updates.push(`fecha_respuesta = $${values.length + 1}`);
-    values.push(fechaRespuesta);
-  }
-  if (horaRespuesta) {
-    updates.push(`hora_respuesta = $${values.length + 1}`);
-    values.push(horaRespuesta);
-  }
+  const resolvingNow = status === "RESUELTO" && incident.estado !== "RESUELTO";
+  const resolvedAt = resolvingNow ? new Date() : null;
+  const resolvedAtParts = resolvedAt ? getLaPazDateTimeParts(resolvedAt) : null;
+  const resolvedDate = resolvedAtParts ? resolvedAtParts.fecha : incident.fecha_respuesta;
+  const resolvedTime = resolvedAtParts ? resolvedAtParts.hora : incident.hora_respuesta;
 
-  const reportDate = incident.fecha_reporte;
-  const reportTime = incident.hora_reporte;
-  const nextDate = fechaRespuesta || reportDate;
-  const nextTime = horaRespuesta || reportTime;
-  const start = new Date(`${reportDate}T${reportTime}`);
-  const end = new Date(`${nextDate}T${nextTime}`);
-  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end.getTime() >= start.getTime()) {
-    const diffMinutes = Math.floor((end.getTime() - start.getTime()) / 60000);
-    const categoria =
-      diffMinutes < 60 ? "Menos de 1 hora" : diffMinutes < 120 ? "1 - 2 horas" : diffMinutes < 240 ? "2 - 4 horas" : "Más de 4 horas";
-    const porcentaje = diffMinutes < 60 ? 100 : diffMinutes < 120 ? 75 : diffMinutes < 240 ? 50 : 25;
-    const regla =
-      diffMinutes < 60 ? "< 1 hora = 100%" : diffMinutes < 120 ? "1 - 2 horas = 75%" : diffMinutes < 240 ? "2 - 4 horas = 50%" : "> 4 horas = 25%";
-    updates.push(`tiempo_minutos = $${values.length + 1}`);
-    values.push(diffMinutes);
-    updates.push(`categoria = $${values.length + 1}`);
-    values.push(categoria);
-    updates.push(`porcentaje = $${values.length + 1}`);
-    values.push(porcentaje);
-    updates.push(`regla_porcentaje = $${values.length + 1}`);
-    values.push(regla);
+  if (resolvingNow) {
+    updates.push(`fecha_respuesta = $${values.length + 1}`);
+    values.push(resolvedDate || "");
+    updates.push(`hora_respuesta = $${values.length + 1}`);
+    values.push(resolvedTime || "");
   }
 
   if (status) {
@@ -152,10 +147,69 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   updates.push(`last_updated_at = now()`);
 
   values.push(incidentId);
-  const result = await db.query(
-    `UPDATE incidents SET ${updates.join(", ")} WHERE id = $${values.length} RETURNING id, estado, encargado, clasificacion`,
+  const updateResult = await db.query(
+    `UPDATE incidents
+     SET ${updates.join(", ")}
+     WHERE id = $${values.length}
+     RETURNING id, estado, encargado, clasificacion, tiempo_minutos, categoria, porcentaje, regla_porcentaje, fecha_respuesta, hora_respuesta`,
     values
   );
+
+  let result = updateResult;
+
+  if ((status === "RESUELTO" || updateResult.rows[0]?.estado === "RESUELTO")) {
+    const kpiResult = await db.query(
+      `WITH calc AS (
+         SELECT
+           id,
+           FLOOR(
+             EXTRACT(
+               EPOCH FROM (
+                 (fecha_respuesta::timestamp + hora_respuesta) -
+                 (fecha_toma::timestamp + hora_toma)
+               )
+             ) / 60
+           )::int AS diff_minutes
+         FROM incidents
+         WHERE id = $1
+           AND fecha_toma IS NOT NULL
+           AND hora_toma IS NOT NULL
+           AND fecha_respuesta IS NOT NULL
+           AND hora_respuesta IS NOT NULL
+           AND (fecha_respuesta::timestamp + hora_respuesta) >= (fecha_toma::timestamp + hora_toma)
+       )
+       UPDATE incidents i
+       SET
+         tiempo_minutos = calc.diff_minutes,
+         categoria = CASE
+           WHEN calc.diff_minutes < 60 THEN 'Menos de 1 hora'
+           WHEN calc.diff_minutes < 120 THEN '1 - 2 horas'
+           WHEN calc.diff_minutes < 240 THEN '2 - 4 horas'
+           ELSE 'Más de 4 horas'
+         END,
+         porcentaje = CASE
+           WHEN calc.diff_minutes < 60 THEN 100
+           WHEN calc.diff_minutes < 120 THEN 75
+           WHEN calc.diff_minutes < 240 THEN 50
+           ELSE 25
+         END,
+         regla_porcentaje = CASE
+           WHEN calc.diff_minutes < 60 THEN '< 1 hora = 100%'
+           WHEN calc.diff_minutes < 120 THEN '1 - 2 horas = 75%'
+           WHEN calc.diff_minutes < 240 THEN '2 - 4 horas = 50%'
+           ELSE '> 4 horas = 25%'
+         END,
+         mes_atencion = TO_CHAR(i.fecha_respuesta, 'YYYY-MM')
+       FROM calc
+       WHERE i.id = calc.id
+       RETURNING i.id, i.estado, i.encargado, i.clasificacion, i.tiempo_minutos, i.categoria, i.porcentaje, i.regla_porcentaje, i.fecha_respuesta, i.hora_respuesta`,
+      [incidentId]
+    );
+
+    if (kpiResult.rowCount > 0) {
+      result = kpiResult;
+    }
+  }
 
   if (status || action === "take") {
     const logStatus = status || "EN_ATENCION";

@@ -14,10 +14,6 @@ type FormValues = {
   encargado: string;
   fechaReporte: string;
   horaReporte: string;
-  fechaRespuesta: string;
-  horaRespuesta: string;
-  accionTomada: string;
-  primerContacto: "SI" | "NO";
 };
 
 type Props = {
@@ -31,20 +27,6 @@ type CatalogItem = {
 };
 type MotivoItem = CatalogItem & { service_type_id: number };
 
-function toDateTime(date: string, time: string): Date | null {
-  if (!date || !time) return null;
-  const value = new Date(`${date}T${time}`);
-  return Number.isNaN(value.getTime()) ? null : value;
-}
-
-function formatDurationMinutes(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const hh = String(h).padStart(2, "0");
-  const mm = String(m).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
 export function IncidentForm({ defaultTipoRegistro = "INCIDENTE" }: Props) {
   const {
     register,
@@ -54,15 +36,10 @@ export function IncidentForm({ defaultTipoRegistro = "INCIDENTE" }: Props) {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
-      primerContacto: "NO",
       tipoRegistro: defaultTipoRegistro,
     },
   });
 
-  const fechaReporte = watch("fechaReporte");
-  const horaReporte = watch("horaReporte");
-  const fechaRespuesta = watch("fechaRespuesta");
-  const horaRespuesta = watch("horaRespuesta");
   const selectedTipoServicio = watch("tipoServicio");
   const selectedMotivo = watch("motivoServicio");
 
@@ -74,41 +51,6 @@ export function IncidentForm({ defaultTipoRegistro = "INCIDENTE" }: Props) {
   const [channels, setChannels] = useState<CatalogItem[]>([]);
   const [gerencias, setGerencias] = useState<CatalogItem[]>([]);
   const [motivos, setMotivos] = useState<MotivoItem[]>([]);
-
-  const duration = useMemo(() => {
-    const start = toDateTime(fechaReporte, horaReporte);
-    const end = toDateTime(fechaRespuesta, horaRespuesta);
-    if (!start || !end) return null;
-    const diffMs = end.getTime() - start.getTime();
-    if (diffMs < 0) return "ERROR";
-    const minutes = Math.floor(diffMs / 60000);
-    return formatDurationMinutes(minutes);
-  }, [fechaReporte, horaReporte, fechaRespuesta, horaRespuesta]);
-
-  const durationMinutes = useMemo(() => {
-    const start = toDateTime(fechaReporte, horaReporte);
-    const end = toDateTime(fechaRespuesta, horaRespuesta);
-    if (!start || !end) return null;
-    const diffMs = end.getTime() - start.getTime();
-    if (diffMs < 0) return null;
-    return Math.floor(diffMs / 60000);
-  }, [fechaReporte, horaReporte, fechaRespuesta, horaRespuesta]);
-
-  const categoriaTiempo = useMemo(() => {
-    if (durationMinutes === null) return "--";
-    if (durationMinutes < 60) return "Menos de 1 hora";
-    if (durationMinutes < 120) return "1 - 2 horas";
-    if (durationMinutes < 240) return "2 - 4 horas";
-    return "Más de 4 horas";
-  }, [durationMinutes]);
-
-  const porcentajeKpi = useMemo(() => {
-    if (durationMinutes === null) return "--";
-    if (durationMinutes < 60) return "100%";
-    if (durationMinutes < 120) return "75%";
-    if (durationMinutes < 240) return "50%";
-    return "25%";
-  }, [durationMinutes]);
 
   const filteredMotivos = useMemo(() => {
     const selected = serviceTypes.find((s) => s.name === selectedTipoServicio);
@@ -299,8 +241,10 @@ export function IncidentForm({ defaultTipoRegistro = "INCIDENTE" }: Props) {
 
       <section className="form-section">
         <div className="form-section__header">
-          <h2 className="form-section__title">Detalle y tiempos</h2>
-          <p className="form-section__copy">Registra lo ocurrido y la ventana exacta de atención.</p>
+          <h2 className="form-section__title">Detalle y reporte inicial</h2>
+          <p className="form-section__copy">
+            Registra lo ocurrido y el momento del reporte. La toma y la resolución se controlan luego desde gestión.
+          </p>
         </div>
         <div className="field">
           <label className="label">Descripción del incidente *</label>
@@ -320,80 +264,16 @@ export function IncidentForm({ defaultTipoRegistro = "INCIDENTE" }: Props) {
             <input className="input" type="time" {...register("horaReporte", { required: "Requerido" })} />
             {errors.horaReporte && <span className="error">{errors.horaReporte.message}</span>}
           </div>
-
-          <div className="field">
-            <label className="label">Fecha de respuesta *</label>
-            <input
-              className="input"
-              type="date"
-              {...register("fechaRespuesta", {
-                required: "Requerido",
-                validate: (value) => {
-                  const start = toDateTime(fechaReporte, horaReporte);
-                  const end = toDateTime(value, horaRespuesta);
-                  if (!start || !end) return true;
-                  return end.getTime() >= start.getTime() || "La respuesta no puede ser anterior al reporte";
-                },
-              })}
-            />
-            {errors.fechaRespuesta && <span className="error">{errors.fechaRespuesta.message}</span>}
-          </div>
-
-          <div className="field">
-            <label className="label">Hora de respuesta *</label>
-            <input
-              className="input"
-              type="time"
-              {...register("horaRespuesta", {
-                required: "Requerido",
-                validate: (value) => {
-                  const start = toDateTime(fechaReporte, horaReporte);
-                  const end = toDateTime(fechaRespuesta, value);
-                  if (!start || !end) return true;
-                  return end.getTime() >= start.getTime() || "La respuesta no puede ser anterior al reporte";
-                },
-              })}
-            />
-            {errors.horaRespuesta && <span className="error">{errors.horaRespuesta.message}</span>}
-          </div>
         </div>
       </section>
 
       <section className="form-section">
         <div className="form-section__header">
-          <h2 className="form-section__title">Resolución y cumplimiento</h2>
-          <p className="form-section__copy">Documenta la solución aplicada y verifica el impacto sobre el KPI.</p>
-        </div>
-        <div className="field">
-          <label className="label">Acción tomada / solución aplicada *</label>
-          <textarea className="textarea" {...register("accionTomada", { required: "Requerido" })} />
-          {errors.accionTomada && <span className="error">{errors.accionTomada.message}</span>}
-        </div>
-
-        <div className="split">
-          <div className="field">
-            <label className="label">Resuelta en el primer contacto *</label>
-            <select className="select" {...register("primerContacto", { required: "Requerido" })}>
-              <option value="NO">No</option>
-              <option value="SI">Sí</option>
-            </select>
-          </div>
-
-          <div className="field">
-            <label className="label">Tiempo transcurrido (auto)</label>
-            <input className="input input--readonly" readOnly value={duration ?? "--"} />
-            {duration === "ERROR" && <span className="error">La respuesta no puede ser anterior al reporte.</span>}
-          </div>
-
-          <div className="field">
-            <label className="label">Categoría por tiempo (auto)</label>
-            <input className="input input--readonly" readOnly value={categoriaTiempo} />
-          </div>
-
-          <div className="field">
-            <label className="label">KPI de cumplimiento (auto)</label>
-            <input className="input input--readonly" readOnly value={porcentajeKpi} />
-          </div>
+          <h2 className="form-section__title">Siguiente etapa del ticket</h2>
+          <p className="form-section__copy">
+            Al guardar, el ticket queda tomado por el usuario actual. Las respuestas se documentan en el historial y la
+            fecha de resolución se genera cuando cierres el ticket desde el panel de gestión.
+          </p>
         </div>
       </section>
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, Filter, FolderKanban, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const PAGE_SIZE = 20;
 
@@ -19,6 +20,8 @@ type Ticket = {
   encargado: string;
   fecha_reporte: string;
   hora_reporte: string;
+  fecha_toma: string | null;
+  hora_toma: string | null;
   fecha_respuesta: string;
   hora_respuesta: string;
   accion_tomada: string;
@@ -152,7 +155,7 @@ export default function ResueltosPage() {
     tiempoMinHasta,
   ]);
 
-  async function fetchTickets(page = 1) {
+  const fetchTickets = useCallback(async (page = 1) => {
     setLoading(true);
     setError(null);
     const separator = queryString ? "&" : "";
@@ -175,7 +178,7 @@ export default function ResueltosPage() {
       }
     );
     setLoading(false);
-  }
+  }, [queryString]);
 
   async function exportXlsx() {
     if (items.length === 0) return;
@@ -192,7 +195,8 @@ export default function ResueltosPage() {
       encargado: item.encargado,
       mes_atencion: item.mes_atencion,
       reporte: formatDateTime(item.fecha_reporte, item.hora_reporte),
-      respuesta: formatDateTime(item.fecha_respuesta, item.hora_respuesta),
+      toma: formatDateTime(item.fecha_toma || undefined, item.hora_toma || undefined),
+      resolucion: formatDateTime(item.fecha_respuesta, item.hora_respuesta),
       accion_tomada: item.accion_tomada,
       primer_contacto: item.primer_contacto ? "Sí" : "No",
       tiempo_minutos: item.tiempo_minutos,
@@ -209,7 +213,7 @@ export default function ResueltosPage() {
 
   useEffect(() => {
     void fetchTickets(1);
-  }, []);
+  }, [fetchTickets]);
 
   const rangeStart = meta.totalItems === 0 ? 0 : (meta.page - 1) * meta.pageSize + 1;
   const rangeEnd = meta.totalItems === 0 ? 0 : rangeStart + items.length - 1;
@@ -220,7 +224,37 @@ export default function ResueltosPage() {
 
   return (
     <main className="page">
+      <section className="hero-panel hero-panel--compact">
+        <div className="hero-panel__content">
+          <div className="page-header">
+            <span className="page-kicker">Histórico general</span>
+            <h1 className="page-title">Tickets y resoluciones</h1>
+            <p className="page-copy">
+              Consulta el histórico con filtros básicos al frente y filtros avanzados bajo demanda para evitar sobrecargar
+              la primera vista.
+            </p>
+          </div>
+          <div className="hero-panel__meta">
+            <span className="topbar-chip topbar-chip--accent">
+              <FolderKanban size={14} />
+              {meta.totalItems} tickets filtrados
+            </span>
+            <span className="topbar-chip">
+              <Filter size={14} />
+              {advancedOpen ? "Filtros avanzados visibles" : "Filtros avanzados ocultos"}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <section className="card">
+        <div className="page-header" style={{ marginBottom: 18 }}>
+          <h2 className="section-title">Búsqueda principal</h2>
+          <p className="page-lead">
+            Usa primero estado, tipo, canal, gerencia y texto libre. Abre filtros avanzados solo cuando necesites precisión
+            adicional.
+          </p>
+        </div>
         <div className="filters">
           <label className="field">
             <span className="label">Estado</span>
@@ -342,9 +376,11 @@ export default function ResueltosPage() {
         </AnimatePresence>
         <div className="actions-row">
           <button className="button" onClick={() => void fetchTickets(1)} disabled={loading}>
+            <Search size={15} />
             {loading ? "Cargando..." : "Buscar"}
           </button>
           <button className="nav-link" onClick={exportXlsx} disabled={items.length === 0}>
+            <Download size={15} />
             Exportar XLSX
           </button>
           <button className="nav-link" onClick={() => setAdvancedOpen((value) => !value)}>
@@ -370,6 +406,7 @@ export default function ResueltosPage() {
               setFechaHasta("");
               setTiempoMinDesde("");
               setTiempoMinHasta("");
+              setError(null);
             }}
           >
             Limpiar
@@ -404,53 +441,79 @@ export default function ResueltosPage() {
             transition={{ duration: 0.22, ease: "easeOut" }}
           >
             {items.length === 0 ? (
-              <p className="muted">Sin resultados. Usa los filtros y presiona Buscar.</p>
+              <div className="empty-state">
+                <strong>Sin resultados para los filtros actuales.</strong>
+                <p className="muted">Afloja un filtro o limpia el formulario para volver a ampliar el histórico.</p>
+              </div>
             ) : (
               <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>ID</th>
-                      <th>Tipo</th>
-                      <th>Solicitante</th>
-                      <th>Tipo servicio</th>
-                      <th>Canal</th>
-                      <th>Gerencia</th>
-                      <th>Motivo</th>
-                      <th>Descripción</th>
-                      <th>Encargado</th>
-                      <th>Mes</th>
-                      <th>Reporte</th>
-                      <th>Respuesta</th>
-                      <th>Acción tomada</th>
-                      <th>Primer contacto</th>
-                      <th>Tiempo (min)</th>
-                      <th>Categoría</th>
-                      <th>% KPI</th>
-                      <th>Estado</th>
+                      <th>Ticket</th>
+                      <th>Solicitante y encargado</th>
+                      <th>Ruta</th>
+                      <th>Toma y resolución</th>
+                      <th>Cierre</th>
+                      <th>KPI</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
                       <tr key={item.id}>
-                        <td>{item.id}</td>
-                        <td>{item.tipo_registro}</td>
-                        <td>{item.solicitante}</td>
-                        <td>{item.tipo_servicio}</td>
-                        <td>{item.canal_oficina}</td>
-                        <td>{item.gerencia}</td>
-                        <td>{item.motivo_servicio}</td>
-                        <td>{item.descripcion}</td>
-                        <td>{item.encargado}</td>
-                        <td>{item.mes_atencion}</td>
-                        <td>{formatDateTime(item.fecha_reporte, item.hora_reporte)}</td>
-                        <td>{formatDateTime(item.fecha_respuesta, item.hora_respuesta)}</td>
-                        <td>{item.accion_tomada}</td>
-                        <td>{item.primer_contacto ? "Sí" : "No"}</td>
-                        <td>{item.tiempo_minutos}</td>
-                        <td>{item.categoria ?? "--"}</td>
-                        <td>{item.porcentaje ?? "--"}</td>
-                        <td>{item.estado}</td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <strong className="table-primary">#{item.id}</strong>
+                            <span className="table-secondary">{item.tipo_registro}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <strong className="table-primary">{item.solicitante}</strong>
+                            <span className="table-secondary">Atendido por {item.encargado}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <strong className="table-primary">{item.tipo_servicio}</strong>
+                            <span className="table-secondary">
+                              {item.canal_oficina} · {item.gerencia}
+                            </span>
+                            <span className="table-secondary line-clamp-2">
+                              {item.motivo_servicio} · {item.descripcion}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <strong className="table-primary">
+                              Toma: {formatDateTime(item.fecha_toma || undefined, item.hora_toma || undefined)}
+                            </strong>
+                            <span className="table-secondary">
+                              Resolución: {formatDateTime(item.fecha_respuesta, item.hora_respuesta)}
+                            </span>
+                            <span className="table-secondary line-clamp-2">
+                              {item.accion_tomada || "Sin acción final registrada"}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <span className={item.estado === "RESUELTO" ? "status-chip status-chip--success" : "status-chip status-chip--warning"}>
+                              {item.estado.replaceAll("_", " ")}
+                            </span>
+                            <span className="table-secondary">
+                              {item.primer_contacto ? "Primer contacto" : "Sin primer contacto"} · {item.tiempo_minutos} min
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="table-cell-stack">
+                            <strong className="table-primary">{item.categoria ?? "Sin categoría"}</strong>
+                            <span className="table-secondary">% KPI: {item.porcentaje ?? "--"}</span>
+                            <span className="table-secondary">Mes: {item.mes_atencion}</span>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

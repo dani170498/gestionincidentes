@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getLaPazIsoString } from "@/lib/utils";
 import { mapExternalStatus } from "@/lib/external-status";
 
 const WEBHOOK_URL = process.env.WEBHOOK_TARGET_URL || "";
@@ -110,7 +111,7 @@ export async function publishCatalogEvent(params: {
 }) {
   const payload: CatalogEventPayload = {
     event: "catalog.changed",
-    occurred_at: new Date().toISOString(),
+    occurred_at: getLaPazIsoString(),
     catalogo: params.catalogo,
     action: params.action,
     item: params.item,
@@ -139,7 +140,7 @@ export async function publishTicketActionEvent(params: {
 }) {
   const payload: TicketActionEventPayload = {
     event: "ticket.action.created",
-    occurred_at: new Date().toISOString(),
+    occurred_at: getLaPazIsoString(),
     ticket: params.ticket,
     action: params.action,
   };
@@ -165,7 +166,7 @@ export async function publishTicketStatusChangedEvent(params: {
 }) {
   const payload: TicketStatusChangedEventPayload = {
     event: "ticket.status.changed",
-    occurred_at: new Date().toISOString(),
+    occurred_at: getLaPazIsoString(),
     ticket: {
       id: params.ticket.id,
       ticket_id: params.ticket.ticketId,

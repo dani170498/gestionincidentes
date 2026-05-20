@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { combineLaPazDateTime, findExternalTicketById, isExternalAuthorized } from "@/lib/external-ticket";
 import { mapExternalStatus } from "@/lib/external-status";
+import { getLaPazIsoString } from "@/lib/utils";
 
-function isAuthorized(req: Request): boolean {
-  const apiKey = req.headers.get("x-api-key") || "";
-  const expected = process.env.EXTERNAL_API_KEY || "";
-  return Boolean(expected) && apiKey === expected;
-}
+type TicketActionRow = {
+  id: number;
+  action_text: string;
+  created_at: Date | string;
+  created_by: string;
+};
 
 export async function GET(req: Request, { params }: { params: Promise<{ ticketId: string }> }) {
-  if (!isAuthorized(req)) {
+  if (!isExternalAuthorized(req)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
@@ -19,30 +22,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticketId
     return NextResponse.json({ error: "ticketId requerido" }, { status: 400 });
   }
 
-  const numericTicketId = /^\d+$/.test(normalizedTicketId) ? Number(normalizedTicketId) : null;
-
-  const result = await db.query(
-    `SELECT id, external_id, tipo_registro, solicitante, tipo_servicio, canal_oficina, gerencia,
-            motivo_servicio, descripcion, encargado, fecha_reporte, hora_reporte,
-            fecha_respuesta, hora_respuesta, accion_tomada, primer_contacto,
-            tiempo_minutos, mes_atencion, categoria, porcentaje, regla_porcentaje,
-            estado, clasificacion, created_at, last_updated_at
-     FROM incidents
-     WHERE external_id = $1 OR ($2::int IS NOT NULL AND id = $2)
-     LIMIT 1`,
-    [normalizedTicketId, numericTicketId]
-  );
-
-  if (result.rowCount === 0) {
+  const item = await findExternalTicketById(normalizedTicketId);
+  if (!item) {
     return NextResponse.json({ error: "ticketId no encontrado" }, { status: 404 });
   }
 
-  const item = result.rows[0];
+  const actionsResult = await db.query(
+    `SELECT ta.id, ta.action_text, ta.created_at, COALESCE(u.full_name, u.username, 'Sistema') AS created_by
+     FROM ticket_actions ta
+     LEFT JOIN users u ON u.id = ta.created_by
+     WHERE ta.incident_id = $1
+     ORDER BY ta.created_at ASC`,
+    [item.id]
+  ) as { rows: TicketActionRow[] };
+
+  const actions = actionsResult.rows.map((row) => ({
+    id: row.id,
+    createdAt: row.created_at instanceof Date ? getLaPazIsoString(row.created_at) : String(row.created_at),
+    createdBy: row.created_by,
+    text: row.action_text,
+  }));
+
   return NextResponse.json({
     ok: true,
     ticket: {
-      ticketId: item.external_id,
-      internalId: item.id,
+      ticketId: item.external_id || String(item.id),
       status: item.estado,
       statusCode: mapExternalStatus(item.estado),
       tipoRegistro: item.tipo_registro,
@@ -53,20 +57,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticketId
       motivoServicio: item.motivo_servicio,
       descripcion: item.descripcion,
       encargado: item.encargado,
-      fechaReporte: item.fecha_reporte,
-      horaReporte: item.hora_reporte,
-      fechaRespuesta: item.fecha_respuesta,
-      horaRespuesta: item.hora_respuesta,
-      accionTomada: item.accion_tomada,
-      primerContacto: item.primer_contacto,
-      tiempoMinutos: item.tiempo_minutos,
-      mesAtencion: item.mes_atencion,
-      categoria: item.categoria,
-      porcentaje: item.porcentaje,
-      reglaPorcentaje: item.regla_porcentaje,
-      clasificacion: item.clasificacion,
       createdAt: item.created_at,
       lastUpdatedAt: item.last_updated_at,
+      timestamps: {
+        reportedAt: combineLaPazDateTime(item.fecha_reporte, item.hora_reporte),
+        takenAt: combineLaPazDateTime(item.fecha_toma, item.hora_toma),
+        resolvedAt: combineLaPazDateTime(item.fecha_respuesta, item.hora_respuesta),
+      },
+      actions,
     },
   });
 }

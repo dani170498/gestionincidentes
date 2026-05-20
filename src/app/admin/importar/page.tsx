@@ -30,8 +30,10 @@ export default function ImportarPage() {
       "encargado",
       "fecha_reporte",
       "hora_reporte",
-      "fecha_respuesta",
-      "hora_respuesta",
+      "fecha_toma",
+      "hora_toma",
+      "fecha_resolucion",
+      "hora_resolucion",
       "accion_tomada",
       "primer_contacto",
       "estado",
@@ -47,11 +49,13 @@ export default function ImportarPage() {
       "SIN_ASIGNAR",
       "25/02/2026",
       "08:30",
+      "",
+      "",
       "25/02/2026",
       "09:00",
-      "PENDIENTE",
-      "NO",
-      "REGISTRADO",
+      "Se resolvió el acceso y se confirmó con el usuario",
+      "SI",
+      "RESUELTO",
     ];
     const csv = `${headers.join(",")}\n${sample.map((v) => `"${v}"`).join(",")}\n`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -135,7 +139,7 @@ export default function ImportarPage() {
         <h2 className="section-title">Columnas recomendadas</h2>
         <p className="muted">
           tipo_registro, solicitante, tipo_servicio, canal_oficina, gerencia, motivo_servicio,
-          descripcion, encargado, fecha_reporte, hora_reporte, fecha_respuesta, hora_respuesta,
+          descripcion, encargado, fecha_reporte, hora_reporte, fecha_toma, hora_toma, fecha_resolucion, hora_resolucion,
           accion_tomada, primer_contacto, estado.
         </p>
         <p className="muted">

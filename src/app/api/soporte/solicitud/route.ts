@@ -2,35 +2,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { authCookieName, verifyJwt } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getLaPazDateTimeParts } from "@/lib/utils";
 
 const GERENCIA_PENDIENTE = "PENDIENTE_DEFINIR";
 
 function toDateParts(date: Date) {
-  const iso = date.toISOString();
-  return {
-    fecha: iso.slice(0, 10),
-    hora: iso.slice(11, 16),
-  };
-}
-
-function monthFromDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
-function categoriaPorTiempo(minutes: number): string {
-  if (minutes < 60) return "Menos de 1 hora";
-  if (minutes < 120) return "1 - 2 horas";
-  if (minutes < 240) return "2 - 4 horas";
-  return "Más de 4 horas";
-}
-
-function porcentajePorTiempo(minutes: number): { porcentaje: number; regla: string } {
-  if (minutes < 60) return { porcentaje: 100, regla: "< 1 hora = 100%" };
-  if (minutes < 120) return { porcentaje: 75, regla: "1 - 2 horas = 75%" };
-  if (minutes < 240) return { porcentaje: 50, regla: "2 - 4 horas = 50%" };
-  return { porcentaje: 25, regla: "> 4 horas = 25%" };
+  return getLaPazDateTimeParts(date);
 }
 
 type RequesterAuth =
@@ -116,10 +93,6 @@ export async function POST(req: Request) {
   const encargado = "SIN_ASIGNAR";
   const createdAt = new Date();
   const { fecha, hora } = toDateParts(createdAt);
-  const diffMinutes = 0;
-  const monthAttention = monthFromDate(createdAt);
-  const categoria = categoriaPorTiempo(diffMinutes);
-  const { porcentaje, regla } = porcentajePorTiempo(diffMinutes);
 
   const client = await db.connect();
   let createdId: number | null = null;
@@ -140,6 +113,8 @@ export async function POST(req: Request) {
         encargado,
         fecha_reporte,
         hora_reporte,
+        fecha_toma,
+        hora_toma,
         fecha_respuesta,
         hora_respuesta,
         accion_tomada,
@@ -152,7 +127,7 @@ export async function POST(req: Request) {
         estado,
         created_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
       )
       RETURNING id`,
       [
@@ -166,15 +141,17 @@ export async function POST(req: Request) {
         encargado,
         fecha,
         hora,
-        fecha,
-        hora,
-        "PENDIENTE",
+        null,
+        null,
+        null,
+        null,
+        null,
         false,
-        diffMinutes,
-        monthAttention,
-        categoria,
-        porcentaje,
-        regla,
+        null,
+        null,
+        null,
+        null,
+        null,
         "REGISTRADO",
         createdAt,
       ]

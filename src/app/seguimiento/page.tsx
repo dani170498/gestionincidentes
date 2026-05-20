@@ -18,6 +18,8 @@ type Ticket = {
   encargado: string;
   fecha_reporte: string;
   hora_reporte: string;
+  fecha_toma: string | null;
+  hora_toma: string | null;
   fecha_respuesta: string;
   hora_respuesta: string;
   accion_tomada: string;
@@ -293,7 +295,11 @@ export default function SeguimientoPage() {
               <p>{formatDateTime(selected.fecha_reporte, selected.hora_reporte)}</p>
             </div>
             <div className="field">
-              <span className="label">Última respuesta registrada</span>
+              <span className="label">Toma del ticket</span>
+              <p>{formatDateTime(selected.fecha_toma || undefined, selected.hora_toma || undefined)}</p>
+            </div>
+            <div className="field">
+              <span className="label">Resolución del ticket</span>
               <p>{formatDateTime(selected.fecha_respuesta, selected.hora_respuesta)}</p>
             </div>
           </div>
@@ -303,8 +309,8 @@ export default function SeguimientoPage() {
               <p>{selected.descripcion}</p>
             </div>
             <div className="field">
-              <span className="label">Acción tomada</span>
-              <p>{selected.accion_tomada || "Aún sin actualización."}</p>
+              <span className="label">Resolución final</span>
+              <p>{selected.accion_tomada || "Aún sin resolución final. Revisa el histórico operativo del equipo."}</p>
             </div>
           </div>
         </section>

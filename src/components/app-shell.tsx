@@ -109,6 +109,14 @@ const links: NavLink[] = [
     group: "Seguimiento",
   },
   {
+    label: "Dashboard",
+    href: "/admin/dashboard",
+    hint: "KPIs, tendencias y detalle filtrable",
+    icon: LayoutDashboard,
+    roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
+    group: "Seguimiento",
+  },
+  {
     label: "Documentación API",
     href: "/docs",
     hint: "Integraciones y ejemplos",

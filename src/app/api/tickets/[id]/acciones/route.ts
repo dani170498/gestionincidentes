@@ -51,6 +51,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!canAccessTicket(auth, incident, "actions")) {
     return NextResponse.json({ error: "No autorizado para registrar acciones en este ticket" }, { status: 403 });
   }
+  if (incident.estado === "RESUELTO") {
+    return NextResponse.json(
+      { error: "El ticket ya fue resuelto y no admite más acciones" },
+      { status: 400 }
+    );
+  }
   if (incident.encargado === "SIN_ASIGNAR") {
     return NextResponse.json(
       { error: "El ticket debe ser tomado antes de registrar acciones" },

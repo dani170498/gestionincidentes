@@ -69,6 +69,10 @@ export function middleware(req: NextRequest) {
       if (!allow(["SOPORTE", "SUPERVISOR", "ADMIN"])) {
         return withSecurityHeaders(NextResponse.redirect(new URL("/no-autorizado", req.url)));
       }
+    } else if (pathname.startsWith("/admin/dashboard")) {
+      if (!allow(["SOPORTE", "SUPERVISOR", "ADMIN"])) {
+        return withSecurityHeaders(NextResponse.redirect(new URL("/no-autorizado", req.url)));
+      }
     } else if (pathname.startsWith("/admin/mis-tickets")) {
       if (!allow(["SOPORTE", "SUPERVISOR", "ADMIN"])) {
         return withSecurityHeaders(NextResponse.redirect(new URL("/no-autorizado", req.url)));

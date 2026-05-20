@@ -22,6 +22,10 @@ type IncidentSecurityRow = {
   primer_contacto: boolean;
   fecha_reporte: string;
   hora_reporte: string;
+  fecha_toma: string | null;
+  hora_toma: string | null;
+  fecha_respuesta: string | null;
+  hora_respuesta: string | null;
 };
 
 export type AuthContext = {
@@ -82,7 +86,9 @@ export async function requireRoles(allowed: Role[]): Promise<AuthContext | null>
 
 export async function getIncidentSecurityRow(incidentId: number): Promise<IncidentSecurityRow | null> {
   const result = (await db.query(
-    "SELECT id, estado, encargado, primer_contacto, fecha_reporte, hora_reporte FROM incidents WHERE id = $1",
+    `SELECT id, estado, encargado, primer_contacto, fecha_reporte, hora_reporte, fecha_toma, hora_toma, fecha_respuesta, hora_respuesta
+     FROM incidents
+     WHERE id = $1`,
     [incidentId]
   )) as { rowCount: number; rows: IncidentSecurityRow[] };
   if (result.rowCount === 0) return null;

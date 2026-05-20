@@ -17,9 +17,11 @@ type ParsedRow = {
   encargado: string;
   fechaReporte: string;
   horaReporte: string;
-  fechaRespuesta: string;
-  horaRespuesta: string;
-  accionTomada: string;
+  fechaToma: string | null;
+  horaToma: string | null;
+  fechaRespuesta: string | null;
+  horaRespuesta: string | null;
+  accionTomada: string | null;
   primerContacto: boolean;
   estado: "REGISTRADO" | "EN_ATENCION" | "RESPONDIDO" | "RESUELTO";
 };
@@ -276,7 +278,7 @@ function parseRow(
   const motivoServicioRaw = getByAlias(row, ["motivo_servicio", "motivo"]) || "SIN_MOTIVO";
   const descripcion = getByAlias(row, ["descripcion", "descripcion_problema", "detalle"]);
   const encargado = getByAlias(row, ["encargado"]) || "SIN_ASIGNAR";
-  const accionTomada = getByAlias(row, ["accion_tomada", "accion"]) || "PENDIENTE";
+  const accionTomada = getByAlias(row, ["accion_tomada", "accion"]) || null;
 
   if (!solicitante || !tipoServicioRaw || !canalOficinaRaw || !gerenciaRaw || !descripcion) {
     return {
@@ -303,22 +305,42 @@ function parseRow(
 
   const fechaReporteRaw = getByAlias(row, ["fecha_reporte", "fechareporte"]);
   const horaReporteRaw = getByAlias(row, ["hora_reporte", "horareporte"]);
-  const fechaRespuestaRaw = getByAlias(row, ["fecha_respuesta", "fecharespuesta"]) || fechaReporteRaw;
-  const horaRespuestaRaw = getByAlias(row, ["hora_respuesta", "horarespuesta"]) || horaReporteRaw;
+  const fechaTomaRaw = getByAlias(row, ["fecha_toma", "fechatoma"]);
+  const horaTomaRaw = getByAlias(row, ["hora_toma", "horatoma"]);
+  const fechaRespuestaRaw =
+    getByAlias(row, ["fecha_resolucion", "fecharesolucion", "fecha_respuesta", "fecharespuesta"]) || null;
+  const horaRespuestaRaw =
+    getByAlias(row, ["hora_resolucion", "horaresolucion", "hora_respuesta", "horarespuesta"]) || null;
 
   const fechaReporte = normalizeDateString(fechaReporteRaw);
   const horaReporte = normalizeTimeString(horaReporteRaw);
-  const fechaRespuesta = normalizeDateString(fechaRespuestaRaw);
-  const horaRespuesta = normalizeTimeString(horaRespuestaRaw);
+  const fechaToma = fechaTomaRaw ? normalizeDateString(fechaTomaRaw) : null;
+  const horaToma = horaTomaRaw ? normalizeTimeString(horaTomaRaw) : null;
+  const fechaRespuesta = fechaRespuestaRaw ? normalizeDateString(fechaRespuestaRaw) : null;
+  const horaRespuesta = horaRespuestaRaw ? normalizeTimeString(horaRespuestaRaw) : null;
 
-  if (!fechaReporte || !horaReporte || !fechaRespuesta || !horaRespuesta) {
+  if (!fechaReporte || !horaReporte) {
     return { ok: false, error: "Fecha/hora inválida. Usa formato dd/mm/yyyy y HH:mm" };
   }
 
   const start = new Date(`${fechaReporte}T${horaReporte}`);
-  const end = new Date(`${fechaRespuesta}T${horaRespuesta}`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
-    return { ok: false, error: "La fecha/hora de respuesta no puede ser anterior al reporte" };
+  if (Number.isNaN(start.getTime())) {
+    return { ok: false, error: "La fecha/hora de reporte no es válida" };
+  }
+
+  if ((fechaToma && !horaToma) || (horaToma && !fechaToma)) {
+    return { ok: false, error: "La toma del ticket debe definir fecha y hora juntas" };
+  }
+
+  if ((fechaRespuesta && !horaRespuesta) || (horaRespuesta && !fechaRespuesta)) {
+    return { ok: false, error: "La resolución del ticket debe definir fecha y hora juntas" };
+  }
+
+  if (fechaRespuesta && horaRespuesta) {
+    const end = new Date(`${fechaRespuesta}T${horaRespuesta}`);
+    if (Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+      return { ok: false, error: "La fecha/hora de resolución no puede ser anterior al reporte" };
+    }
   }
 
   const primerContacto = parseBool(getByAlias(row, ["primer_contacto", "primercontacto"]));
@@ -344,6 +366,8 @@ function parseRow(
       encargado,
       fechaReporte,
       horaReporte,
+      fechaToma,
+      horaToma,
       fechaRespuesta,
       horaRespuesta,
       accionTomada,
@@ -414,12 +438,15 @@ export async function POST(req: Request) {
     }
 
     const item = parsed.value;
-    const start = new Date(`${item.fechaReporte}T${item.horaReporte}`);
-    const end = new Date(`${item.fechaRespuesta}T${item.horaRespuesta}`);
-    const diffMinutes = Math.floor((end.getTime() - start.getTime()) / 60000);
-    const categoria = categoriaPorTiempo(diffMinutes);
-    const { porcentaje, regla } = porcentajePorTiempo(diffMinutes);
-    const mesAtencion = monthFromDate(end);
+    const start = item.fechaToma && item.horaToma
+      ? new Date(`${item.fechaToma}T${item.horaToma}`)
+      : null;
+    const hasResolution = Boolean(item.fechaRespuesta && item.horaRespuesta);
+    const end = hasResolution ? new Date(`${item.fechaRespuesta}T${item.horaRespuesta}`) : null;
+    const diffMinutes = start && end ? Math.floor((end.getTime() - start.getTime()) / 60000) : null;
+    const categoria = diffMinutes === null ? null : categoriaPorTiempo(diffMinutes);
+    const metrics = diffMinutes === null ? null : porcentajePorTiempo(diffMinutes);
+    const mesAtencion = end ? monthFromDate(end) : null;
 
     try {
       await db.query(
@@ -434,6 +461,8 @@ export async function POST(req: Request) {
           encargado,
           fecha_reporte,
           hora_reporte,
+          fecha_toma,
+          hora_toma,
           fecha_respuesta,
           hora_respuesta,
           accion_tomada,
@@ -446,7 +475,7 @@ export async function POST(req: Request) {
           estado,
           created_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,now()
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now()
         )`,
         [
           item.tipoRegistro,
@@ -459,6 +488,8 @@ export async function POST(req: Request) {
           item.encargado,
           item.fechaReporte,
           item.horaReporte,
+          item.fechaToma,
+          item.horaToma,
           item.fechaRespuesta,
           item.horaRespuesta,
           item.accionTomada,
@@ -466,8 +497,8 @@ export async function POST(req: Request) {
           diffMinutes,
           mesAtencion,
           categoria,
-          porcentaje,
-          regla,
+          metrics?.porcentaje ?? null,
+          metrics?.regla ?? null,
           item.estado,
         ]
       );
