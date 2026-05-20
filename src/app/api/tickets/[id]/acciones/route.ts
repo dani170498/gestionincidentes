@@ -4,6 +4,14 @@ import { canAccessTicket, getIncidentSecurityRow, requireRoles } from "@/lib/sec
 import { getLaPazIsoString } from "@/lib/utils";
 import { publishTicketActionEvent } from "@/lib/webhooks";
 
+type TicketActionRow = {
+  id: number;
+  incident_id: number;
+  action_text: string;
+  created_at: Date | string;
+  created_by_name?: string;
+};
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRoles(["SOPORTE", "SUPERVISOR", "ADMIN"]);
   if (!auth) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -28,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     [incidentId]
   );
 
-  const items = result.rows.map((row) => ({
+  const items = (result.rows as TicketActionRow[]).map((row) => ({
     ...row,
     created_at: row.created_at instanceof Date ? getLaPazIsoString(row.created_at) : String(row.created_at),
   }));
