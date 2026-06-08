@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 import {
   ArrowRightLeft,
   BookOpenText,
+  CalendarClock,
   ChartColumn,
   CircleUserRound,
   FileSpreadsheet,
@@ -89,6 +90,14 @@ const links: NavLink[] = [
     href: "/admin/mis-tickets",
     hint: "Atención, histórico y reasignación",
     icon: ShieldCheck,
+    roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
+    group: "Seguimiento",
+  },
+  {
+    label: "Mis tickets modificaciones",
+    href: "/admin/mis-tickets-modificaciones",
+    hint: "Ajuste manual de fecha y hora de resolución",
+    icon: CalendarClock,
     roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
     group: "Seguimiento",
   },

@@ -23,6 +23,22 @@ async function resolveSupportAssignee(assignTo: string) {
   return result.rows[0].full_name || result.rows[0].username;
 }
 
+function isValidDateInput(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isValidTimeInput(value: string) {
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value);
+}
+
+function normalizeTimeInput(value: string) {
+  return value.length === 5 ? `${value}:00` : value;
+}
+
+function toComparableDate(date: string, time: string) {
+  return new Date(`${date}T${normalizeTimeInput(time)}-04:00`);
+}
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRoles(["SOPORTE", "SUPERVISOR", "ADMIN"]);
   if (!auth) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -41,10 +57,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const accionTomada = typeof body?.accionTomada === "string" ? body.accionTomada.trim() : undefined;
   const descripcion = typeof body?.descripcion === "string" ? body.descripcion.trim() : undefined;
   const primerContacto = typeof body?.primerContacto === "boolean" ? body.primerContacto : undefined;
+  const requestedResolutionDate =
+    typeof body?.fechaRespuesta === "string" ? body.fechaRespuesta.trim() : undefined;
+  const requestedResolutionTime =
+    typeof body?.horaRespuesta === "string" ? body.horaRespuesta.trim() : undefined;
+  const mode = body?.mode === "resolution-edit" ? "resolution-edit" : "standard";
+  const wantsManualResolutionEdit =
+    mode === "resolution-edit" && (requestedResolutionDate !== undefined || requestedResolutionTime !== undefined);
 
   const allowedStatus = ["REGISTRADO", "EN_ATENCION", "RESPONDIDO", "RESUELTO"];
   if (status && !allowedStatus.includes(status)) {
     return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+  }
+
+  if (requestedResolutionDate !== undefined && requestedResolutionDate !== "" && !isValidDateInput(requestedResolutionDate)) {
+    return NextResponse.json({ error: "Fecha de resolución inválida" }, { status: 400 });
+  }
+
+  if (requestedResolutionTime !== undefined && requestedResolutionTime !== "" && !isValidTimeInput(requestedResolutionTime)) {
+    return NextResponse.json({ error: "Hora de resolución inválida" }, { status: 400 });
   }
 
   const incident = await getIncidentSecurityRow(incidentId);
@@ -62,7 +93,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "No puedes gestionar este ticket" }, { status: 403 });
   }
 
-  if (incident.estado === "RESUELTO") {
+  if (incident.estado === "RESUELTO" && !wantsManualResolutionEdit) {
     return NextResponse.json(
       { error: "El ticket ya fue resuelto y no admite más gestión ni reasignaciones" },
       { status: 400 }
@@ -123,12 +154,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const resolvingNow = status === "RESUELTO" && incident.estado !== "RESUELTO";
-  const resolvedAt = resolvingNow ? new Date() : null;
+  const shouldUseManualResolution =
+    status === "RESUELTO" &&
+    mode === "resolution-edit" &&
+    Boolean(requestedResolutionDate) &&
+    Boolean(requestedResolutionTime);
+  const resolvedAt = resolvingNow && !shouldUseManualResolution ? new Date() : null;
   const resolvedAtParts = resolvedAt ? getLaPazDateTimeParts(resolvedAt) : null;
-  const resolvedDate = resolvedAtParts ? resolvedAtParts.fecha : incident.fecha_respuesta;
-  const resolvedTime = resolvedAtParts ? resolvedAtParts.hora : incident.hora_respuesta;
+  const resolvedDate = shouldUseManualResolution
+    ? requestedResolutionDate || incident.fecha_respuesta
+    : resolvedAtParts
+      ? resolvedAtParts.fecha
+      : incident.fecha_respuesta;
+  const resolvedTime = shouldUseManualResolution
+    ? normalizeTimeInput(requestedResolutionTime || incident.hora_respuesta || "")
+    : resolvedAtParts
+      ? resolvedAtParts.hora
+      : incident.hora_respuesta;
 
-  if (resolvingNow) {
+  if (mode === "resolution-edit" && status === "RESUELTO" && (!resolvedDate || !resolvedTime)) {
+    return NextResponse.json(
+      { error: "Debes completar fecha y hora de resolución para tickets resueltos" },
+      { status: 400 }
+    );
+  }
+
+  if (mode === "resolution-edit" && resolvedDate && resolvedTime && incident.fecha_toma && incident.hora_toma) {
+    const takenAt = toComparableDate(incident.fecha_toma, incident.hora_toma);
+    const resolvedAtDate = toComparableDate(resolvedDate, resolvedTime);
+    if (Number.isNaN(takenAt.getTime()) || Number.isNaN(resolvedAtDate.getTime())) {
+      return NextResponse.json({ error: "No se pudo validar la resolución indicada" }, { status: 400 });
+    }
+    if (resolvedAtDate < takenAt) {
+      return NextResponse.json(
+        { error: "La resolución no puede ser anterior a la fecha y hora de toma del ticket" },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (resolvingNow || (mode === "resolution-edit" && status === "RESUELTO" && resolvedDate && resolvedTime)) {
     updates.push(`fecha_respuesta = $${values.length + 1}`);
     values.push(resolvedDate || "");
     updates.push(`hora_respuesta = $${values.length + 1}`);

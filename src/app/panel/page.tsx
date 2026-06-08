@@ -28,6 +28,11 @@ export default function PanelPage() {
       { label: "Documentación API", href: "/docs", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Pendientes de asignación", href: "/admin/en-proceso", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Mis tickets", href: "/admin/mis-tickets", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
+      {
+        label: "Mis tickets modificaciones",
+        href: "/admin/mis-tickets-modificaciones",
+        roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
+      },
       { label: "Tickets", href: "/admin/resueltos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Gráficos", href: "/admin/graficos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Dashboard", href: "/admin/dashboard", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
