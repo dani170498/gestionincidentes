@@ -57,13 +57,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const accionTomada = typeof body?.accionTomada === "string" ? body.accionTomada.trim() : undefined;
   const descripcion = typeof body?.descripcion === "string" ? body.descripcion.trim() : undefined;
   const primerContacto = typeof body?.primerContacto === "boolean" ? body.primerContacto : undefined;
+  const requestedReportDate = typeof body?.fechaReporte === "string" ? body.fechaReporte.trim() : undefined;
+  const requestedReportTime = typeof body?.horaReporte === "string" ? body.horaReporte.trim() : undefined;
+  const requestedTakeDate = typeof body?.fechaToma === "string" ? body.fechaToma.trim() : undefined;
+  const requestedTakeTime = typeof body?.horaToma === "string" ? body.horaToma.trim() : undefined;
   const requestedResolutionDate =
     typeof body?.fechaRespuesta === "string" ? body.fechaRespuesta.trim() : undefined;
   const requestedResolutionTime =
     typeof body?.horaRespuesta === "string" ? body.horaRespuesta.trim() : undefined;
   const mode = body?.mode === "resolution-edit" ? "resolution-edit" : "standard";
-  const wantsManualResolutionEdit =
-    mode === "resolution-edit" && (requestedResolutionDate !== undefined || requestedResolutionTime !== undefined);
+  const wantsManualTimelineEdit =
+    mode === "resolution-edit" &&
+    (
+      requestedReportDate !== undefined ||
+      requestedReportTime !== undefined ||
+      requestedTakeDate !== undefined ||
+      requestedTakeTime !== undefined ||
+      requestedResolutionDate !== undefined ||
+      requestedResolutionTime !== undefined
+    );
 
   const allowedStatus = ["REGISTRADO", "EN_ATENCION", "RESPONDIDO", "RESUELTO"];
   if (status && !allowedStatus.includes(status)) {
@@ -72,6 +84,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (requestedResolutionDate !== undefined && requestedResolutionDate !== "" && !isValidDateInput(requestedResolutionDate)) {
     return NextResponse.json({ error: "Fecha de resolución inválida" }, { status: 400 });
+  }
+
+  if (requestedReportDate !== undefined && requestedReportDate !== "" && !isValidDateInput(requestedReportDate)) {
+    return NextResponse.json({ error: "Fecha de reporte inválida" }, { status: 400 });
+  }
+
+  if (requestedReportTime !== undefined && requestedReportTime !== "" && !isValidTimeInput(requestedReportTime)) {
+    return NextResponse.json({ error: "Hora de reporte inválida" }, { status: 400 });
+  }
+
+  if (requestedTakeDate !== undefined && requestedTakeDate !== "" && !isValidDateInput(requestedTakeDate)) {
+    return NextResponse.json({ error: "Fecha de toma inválida" }, { status: 400 });
+  }
+
+  if (requestedTakeTime !== undefined && requestedTakeTime !== "" && !isValidTimeInput(requestedTakeTime)) {
+    return NextResponse.json({ error: "Hora de toma inválida" }, { status: 400 });
   }
 
   if (requestedResolutionTime !== undefined && requestedResolutionTime !== "" && !isValidTimeInput(requestedResolutionTime)) {
@@ -93,7 +121,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "No puedes gestionar este ticket" }, { status: 403 });
   }
 
-  if (incident.estado === "RESUELTO" && !wantsManualResolutionEdit) {
+  if (incident.estado === "RESUELTO" && !wantsManualTimelineEdit) {
     return NextResponse.json(
       { error: "El ticket ya fue resuelto y no admite más gestión ni reasignaciones" },
       { status: 400 }
@@ -161,6 +189,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     Boolean(requestedResolutionTime);
   const resolvedAt = resolvingNow && !shouldUseManualResolution ? new Date() : null;
   const resolvedAtParts = resolvedAt ? getLaPazDateTimeParts(resolvedAt) : null;
+  const reportDate = mode === "resolution-edit" ? requestedReportDate || incident.fecha_reporte : incident.fecha_reporte;
+  const reportTime =
+    mode === "resolution-edit" && requestedReportTime
+      ? normalizeTimeInput(requestedReportTime)
+      : incident.hora_reporte;
+  const takeDate = mode === "resolution-edit" ? requestedTakeDate || incident.fecha_toma : incident.fecha_toma;
+  const takeTime =
+    mode === "resolution-edit" && requestedTakeTime
+      ? normalizeTimeInput(requestedTakeTime)
+      : incident.hora_toma;
   const resolvedDate = shouldUseManualResolution
     ? requestedResolutionDate || incident.fecha_respuesta
     : resolvedAtParts
@@ -179,8 +217,36 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
-  if (mode === "resolution-edit" && resolvedDate && resolvedTime && incident.fecha_toma && incident.hora_toma) {
-    const takenAt = toComparableDate(incident.fecha_toma, incident.hora_toma);
+  if (mode === "resolution-edit" && ((requestedReportDate && !requestedReportTime) || (!requestedReportDate && requestedReportTime))) {
+    return NextResponse.json(
+      { error: "Debes completar fecha y hora de reporte para ajustar manualmente el reporte del ticket" },
+      { status: 400 }
+    );
+  }
+
+  if (mode === "resolution-edit" && ((requestedTakeDate && !requestedTakeTime) || (!requestedTakeDate && requestedTakeTime))) {
+    return NextResponse.json(
+      { error: "Debes completar fecha y hora de toma para ajustar manualmente la toma del ticket" },
+      { status: 400 }
+    );
+  }
+
+  if (mode === "resolution-edit" && reportDate && reportTime) {
+    const reportedAt = toComparableDate(reportDate, reportTime);
+    if (Number.isNaN(reportedAt.getTime())) {
+      return NextResponse.json({ error: "No se pudo validar el reporte indicado" }, { status: 400 });
+    }
+  }
+
+  if (mode === "resolution-edit" && takeDate && takeTime) {
+    const takenAt = toComparableDate(takeDate, takeTime);
+    if (Number.isNaN(takenAt.getTime())) {
+      return NextResponse.json({ error: "No se pudo validar la toma indicada" }, { status: 400 });
+    }
+  }
+
+  if (mode === "resolution-edit" && resolvedDate && resolvedTime && takeDate && takeTime) {
+    const takenAt = toComparableDate(takeDate, takeTime);
     const resolvedAtDate = toComparableDate(resolvedDate, resolvedTime);
     if (Number.isNaN(takenAt.getTime()) || Number.isNaN(resolvedAtDate.getTime())) {
       return NextResponse.json({ error: "No se pudo validar la resolución indicada" }, { status: 400 });
@@ -191,6 +257,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: 400 }
       );
     }
+  }
+
+  if (mode === "resolution-edit" && reportDate && reportTime) {
+    updates.push(`fecha_reporte = $${values.length + 1}`);
+    values.push(reportDate);
+    updates.push(`hora_reporte = $${values.length + 1}`);
+    values.push(reportTime);
+  }
+
+  if (mode === "resolution-edit" && takeDate && takeTime) {
+    updates.push(`fecha_toma = $${values.length + 1}`);
+    values.push(takeDate);
+    updates.push(`hora_toma = $${values.length + 1}`);
+    values.push(takeTime);
   }
 
   if (resolvingNow || (mode === "resolution-edit" && status === "RESUELTO" && resolvedDate && resolvedTime)) {
@@ -216,7 +296,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     `UPDATE incidents
      SET ${updates.join(", ")}
      WHERE id = $${values.length}
-     RETURNING id, estado, encargado, clasificacion, tiempo_minutos, categoria, porcentaje, regla_porcentaje, fecha_respuesta, hora_respuesta`,
+     RETURNING id, estado, encargado, clasificacion, tiempo_minutos, categoria, porcentaje, regla_porcentaje, fecha_reporte, hora_reporte, fecha_toma, hora_toma, fecha_respuesta, hora_respuesta`,
     values
   );
 
@@ -267,7 +347,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          mes_atencion = TO_CHAR(i.fecha_respuesta, 'YYYY-MM')
        FROM calc
        WHERE i.id = calc.id
-       RETURNING i.id, i.estado, i.encargado, i.clasificacion, i.tiempo_minutos, i.categoria, i.porcentaje, i.regla_porcentaje, i.fecha_respuesta, i.hora_respuesta`,
+       RETURNING i.id, i.estado, i.encargado, i.clasificacion, i.tiempo_minutos, i.categoria, i.porcentaje, i.regla_porcentaje, i.fecha_reporte, i.hora_reporte, i.fecha_toma, i.hora_toma, i.fecha_respuesta, i.hora_respuesta`,
       [incidentId]
     );
 

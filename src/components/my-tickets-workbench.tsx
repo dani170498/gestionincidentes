@@ -68,6 +68,10 @@ type EditState = {
   gerencia: string;
   motivo_servicio: string;
   accion_tomada: string;
+  fecha_reporte: string;
+  hora_reporte: string;
+  fecha_toma: string;
+  hora_toma: string;
   fecha_respuesta: string;
   hora_respuesta: string;
   primer_contacto: boolean;
@@ -123,9 +127,9 @@ const WORKBENCH_CONFIG: Record<WorkbenchMode, WorkbenchConfig> = {
     historyCopy:
       "Mantén la bitácora operativa a la mano para dejar trazabilidad clara mientras ajustas el cierre del ticket.",
     resolutionCopy:
-      "Usa este panel para corregir la fecha y hora de resolución sin romper la lógica operativa del ticket.",
+      "Usa este panel para corregir toma, resolución y trazabilidad sin romper la lógica operativa del ticket.",
     resolutionHint:
-      "En este módulo puedes ajustar manualmente la resolución. Si el ticket pasa a RESUELTO, ambos campos deben quedar completos.",
+      "En este módulo puedes ajustar manualmente la toma y la resolución. Si el ticket pasa a RESUELTO, la cronología debe quedar consistente.",
     submitLabel: "Guardar modificación",
     manageLabel: "Gestionar modificación",
     statusWhenResolved: "Cerrado",
@@ -312,6 +316,10 @@ export function MyTicketsWorkbench({ mode }: { mode: WorkbenchMode }) {
       gerencia: ticket.gerencia ?? "",
       motivo_servicio: ticket.motivo_servicio ?? "",
       accion_tomada: ticket.accion_tomada ?? "",
+      fecha_reporte: toDateValue(ticket.fecha_reporte),
+      hora_reporte: toTimeValue(ticket.hora_reporte),
+      fecha_toma: toDateValue(ticket.fecha_toma || undefined),
+      hora_toma: toTimeValue(ticket.hora_toma || undefined),
       fecha_respuesta: toDateValue(ticket.fecha_respuesta),
       hora_respuesta: toTimeValue(ticket.hora_respuesta),
       primer_contacto: Boolean(ticket.primer_contacto),
@@ -340,6 +348,10 @@ export function MyTicketsWorkbench({ mode }: { mode: WorkbenchMode }) {
         accionTomada: edit.accion_tomada,
         primerContacto: edit.primer_contacto,
         status: edit.estado,
+        fechaReporte: config.allowResolutionEdit ? edit.fecha_reporte : undefined,
+        horaReporte: config.allowResolutionEdit ? edit.hora_reporte : undefined,
+        fechaToma: config.allowResolutionEdit ? edit.fecha_toma : undefined,
+        horaToma: config.allowResolutionEdit ? edit.hora_toma : undefined,
         fechaRespuesta: config.allowResolutionEdit ? edit.fecha_respuesta : undefined,
         horaRespuesta: config.allowResolutionEdit ? edit.hora_respuesta : undefined,
         mode,
@@ -353,6 +365,10 @@ export function MyTicketsWorkbench({ mode }: { mode: WorkbenchMode }) {
     }
     const data = await res.json().catch(() => null);
     if (data?.item) {
+      const reportDate = toDateValue(data.item.fecha_reporte);
+      const reportTime = toTimeValue(data.item.hora_reporte);
+      const takenDate = toDateValue(data.item.fecha_toma);
+      const takenTime = toTimeValue(data.item.hora_toma);
       const resolvedDate = toDateValue(data.item.fecha_respuesta);
       const resolvedTime = toTimeValue(data.item.hora_respuesta);
       setSelected((current) =>
@@ -362,6 +378,10 @@ export function MyTicketsWorkbench({ mode }: { mode: WorkbenchMode }) {
               gerencia: edit.gerencia,
               motivo_servicio: edit.motivo_servicio,
               accion_tomada: edit.accion_tomada,
+              fecha_reporte: reportDate || current.fecha_reporte,
+              hora_reporte: reportTime || current.hora_reporte,
+              fecha_toma: takenDate || current.fecha_toma,
+              hora_toma: takenTime || current.hora_toma,
               fecha_respuesta: resolvedDate || current.fecha_respuesta,
               hora_respuesta: resolvedTime || current.hora_respuesta,
               primer_contacto: edit.primer_contacto,
@@ -795,10 +815,58 @@ export function MyTicketsWorkbench({ mode }: { mode: WorkbenchMode }) {
                   </label>
                   <div className="split">
                     <label className="field">
-                      <span className="label">Fecha de resolución</span>
+                      <span className="label">Fecha de reporte</span>
                       <input
                         className={`input ${config.allowResolutionEdit ? "" : "input--readonly"}`}
                         type="date"
+                        value={edit.fecha_reporte}
+                        onChange={(e) => setEdit({ ...edit, fecha_reporte: e.target.value })}
+                        readOnly={!config.allowResolutionEdit}
+                        disabled={!config.allowResolutionEdit}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="label">Hora de reporte</span>
+                      <input
+                        className={`input ${config.allowResolutionEdit ? "" : "input--readonly"}`}
+                        type="time"
+                        value={edit.hora_reporte}
+                        onChange={(e) => setEdit({ ...edit, hora_reporte: e.target.value })}
+                        readOnly={!config.allowResolutionEdit}
+                        disabled={!config.allowResolutionEdit}
+                      />
+                    </label>
+                  </div>
+                  <div className="split">
+                    <label className="field">
+                      <span className="label">Fecha de toma</span>
+                      <input
+                      className={`input ${config.allowResolutionEdit ? "" : "input--readonly"}`}
+                      type="date"
+                      value={edit.fecha_toma}
+                      onChange={(e) => setEdit({ ...edit, fecha_toma: e.target.value })}
+                      readOnly={!config.allowResolutionEdit}
+                      disabled={!config.allowResolutionEdit}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="label">Hora de toma</span>
+                    <input
+                      className={`input ${config.allowResolutionEdit ? "" : "input--readonly"}`}
+                      type="time"
+                      value={edit.hora_toma}
+                      onChange={(e) => setEdit({ ...edit, hora_toma: e.target.value })}
+                      readOnly={!config.allowResolutionEdit}
+                      disabled={!config.allowResolutionEdit}
+                    />
+                  </label>
+                </div>
+                <div className="split">
+                  <label className="field">
+                    <span className="label">Fecha de resolución</span>
+                    <input
+                      className={`input ${config.allowResolutionEdit ? "" : "input--readonly"}`}
+                      type="date"
                         value={edit.fecha_respuesta}
                         onChange={(e) => setEdit({ ...edit, fecha_respuesta: e.target.value })}
                         readOnly={!config.allowResolutionEdit}
