@@ -34,6 +34,7 @@ export default function PanelPage() {
         roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
       },
       { label: "Tickets", href: "/admin/resueltos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
+      { label: "Reportes", href: "/admin/reportes", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Gráficos", href: "/admin/graficos", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Dashboard", href: "/admin/dashboard", roles: ["SOPORTE", "SUPERVISOR", "ADMIN"] },
       { label: "Importar CSV/Excel", href: "/admin/importar", roles: ["ADMIN"] },

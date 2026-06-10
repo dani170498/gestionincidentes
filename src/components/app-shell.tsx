@@ -110,6 +110,14 @@ const links: NavLink[] = [
     group: "Seguimiento",
   },
   {
+    label: "Reportes",
+    href: "/admin/reportes",
+    hint: "Exportación XLSX por rango de fechas",
+    icon: FileSpreadsheet,
+    roles: ["SOPORTE", "SUPERVISOR", "ADMIN"],
+    group: "Seguimiento",
+  },
+  {
     label: "Gráficos",
     href: "/admin/graficos",
     hint: "Distribución por causa y tiempo",
