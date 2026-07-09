@@ -4,54 +4,15 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Download, FileSpreadsheet, Search } from "lucide-react";
 import { useState } from "react";
 
-type ReportItem = {
-  id: number;
-  tipo_registro: string;
-  solicitante: string;
-  tipo_servicio: string;
-  canal_oficina: string;
-  gerencia: string;
-  motivo_servicio: string;
-  descripcion: string;
-  encargado: string;
-  fecha_reporte: string;
-  hora_reporte: string;
-  fecha_toma: string | null;
-  hora_toma: string | null;
-  fecha_respuesta: string | null;
-  hora_respuesta: string | null;
-  accion_tomada: string;
-  primer_contacto: boolean;
-  tiempo_minutos: number;
-  mes_atencion: string;
-  categoria: string | null;
-  porcentaje: number | null;
-  estado: string;
-};
-
 type ReportMeta = {
   totalItems: number;
   fechaDesde: string;
   fechaHasta: string;
 };
 
-function formatDateTime(date?: string | null, time?: string | null) {
-  if (!date) return "--";
-  const datePart = date.includes("T") ? date.split("T")[0] : date;
-  const [y, m, d] = datePart.split("-");
-  const timePart = time
-    ? time.split(".")[0]
-    : date.includes("T")
-      ? date.split("T")[1] || ""
-      : "";
-  const hhmm = timePart ? timePart.slice(0, 5) : "00:00";
-  return `${y}/${m}/${d} ${hhmm}`;
-}
-
 export default function ReportesPage() {
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
-  const [items, setItems] = useState<ReportItem[]>([]);
   const [meta, setMeta] = useState<ReportMeta | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -80,10 +41,8 @@ export default function ReportesPage() {
         throw new Error(data?.error || "No se pudo generar el reporte");
       }
 
-      setItems(data.items || []);
       setMeta(data.meta || null);
     } catch (err) {
-      setItems([]);
       setMeta(null);
       setError(err instanceof Error ? err.message : "No se pudo generar el reporte");
     } finally {
@@ -92,36 +51,29 @@ export default function ReportesPage() {
   }
 
   async function exportarXlsx() {
-    if (items.length === 0 || !meta) return;
+    if (!meta) return;
     setExporting(true);
     try {
-      const XLSX = await import("xlsx");
-      const rows = items.map((item) => ({
-        id: item.id,
-        tipo_registro: item.tipo_registro,
-        solicitante: item.solicitante,
-        tipo_servicio: item.tipo_servicio,
-        canal_oficina: item.canal_oficina,
-        gerencia: item.gerencia,
-        motivo_servicio: item.motivo_servicio,
-        descripcion: item.descripcion,
-        encargado: item.encargado,
-        mes_atencion: item.mes_atencion,
-        reporte: formatDateTime(item.fecha_reporte, item.hora_reporte),
-        toma: formatDateTime(item.fecha_toma, item.hora_toma),
-        resolucion: formatDateTime(item.fecha_respuesta, item.hora_respuesta),
-        accion_tomada: item.accion_tomada,
-        primer_contacto: item.primer_contacto ? "Sí" : "No",
-        tiempo_minutos: item.tiempo_minutos,
-        categoria: item.categoria ?? "",
-        porcentaje: item.porcentaje ?? "",
-        estado: item.estado,
-      }));
+      const query = new URLSearchParams({
+        fechaDesde: meta.fechaDesde,
+        fechaHasta: meta.fechaHasta,
+      });
+      const res = await fetch(`/api/reportes/kpi-export?${query.toString()}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "No se pudo exportar el reporte KPI");
+      }
 
-      const worksheet = XLSX.utils.json_to_sheet(rows);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte");
-      XLSX.writeFile(workbook, `reporte_tickets_${meta.fechaDesde}_a_${meta.fechaHasta}.xlsx`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `reporte_kpi_${meta.fechaDesde}_a_${meta.fechaHasta}.xlsx`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo exportar el reporte KPI");
     } finally {
       setExporting(false);
     }
@@ -134,9 +86,7 @@ export default function ReportesPage() {
           <div className="page-header">
             <span className="page-kicker">Módulo de reportes</span>
             <h1 className="page-title">Exportación XLSX por rango</h1>
-            <p className="page-copy">
-              Genera el mismo detalle del Excel de tickets usando un rango de fechas de reporte.
-            </p>
+            <p className="page-copy">Genera el detalle y la hoja ejecutiva KPI en un Excel por rango de fechas.</p>
           </div>
           <div className="hero-panel__meta">
             <span className="topbar-chip topbar-chip--accent">
@@ -163,16 +113,15 @@ export default function ReportesPage() {
             <Search size={15} />
             {loading ? "Consultando..." : "Generar reporte"}
           </button>
-          <button className="nav-link" onClick={exportarXlsx} disabled={items.length === 0 || exporting}>
+          <button className="nav-link" onClick={() => void exportarXlsx()} disabled={!meta || exporting}>
             <Download size={15} />
-            {exporting ? "Exportando..." : "Exportar XLSX"}
+            {exporting ? "Exportando..." : "Exportar XLSX KPI"}
           </button>
           <button
             className="nav-link"
             onClick={() => {
               setFechaDesde("");
               setFechaHasta("");
-              setItems([]);
               setMeta(null);
               setError(null);
             }}

@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+__pycache__/
+*.pyc
+.venv-reporting/
 .agents/
 .codex
 skills-lock.json
